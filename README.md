@@ -19,4 +19,6 @@ pip install -r requirements.txt
 ```
 
 Analysis code requires jupyter notebook, register the environment as a notebook kernel:
+```bash
 python -m ipykernel install --user --name barter --display-name "barter"
+```
