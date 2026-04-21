@@ -1,0 +1,75 @@
+System Prompt: "You are participating in a trading simulation. There are 4 types of goods: A, B, C, and D. You may negotiate with other participants to exchange goods. Your goal is to acquire a bundle of goods that best serves your needs. Think carefully about what you want and why before making or accepting offers."
+
+Persona:
+A: "Your sole need is to collect as many of item A as you can." (If telling Cobb-Douglas): "In particular, the value of your inventory is modeled by the utility function (A+1)^1(B+1)^0(C+1)^0(D+1)^0, where A,B,C, and D are the number of each item you possess."
+B: "Your sole need is to collect as many of item B as you can." (If telling Cobb-Douglas): "In particular, the value of your inventory is modeled by the utility function (A+1)^0(B+1)^1(C+1)^0(D+1)^0, where A,B,C, and D are the number of each item you possess."
+C: "Your sole need is to collect as many of item C as you can."  (If telling Cobb-Douglas): "In particular, the value of your inventory is modeled by the utility function (A+1)^0(B+1)^0(C+1)^1(D+1)^0, where A,B,C, and D are the number of each item you possess."
+D: "Your sole need is to collect as many of item D as you can."  (If telling Cobb-Douglas): "In particular, the value of your inventory is modeled by the utility function (A+1)^0(B+1)^0(C+1)^0(D+1)^1, where A,B,C, and D are the number of each item you possess."
+
+
+World State: "Your inventory: A×{num_A}, B×{num_B}, C×{num_C}, D×{num_D}
+Recent trades you completed: {trade_history}
+Negotiation History: {Negotiation_history} (All messages previously received in this negotiation)"
+
+Decision Prompts:
+
+Negotiation Phase(first message): "You are negotiating with a trading partner. You may make an offer, counter-offer, ask questions, or decline to engage."
+Negotiation Phase: "You are negotiating with a trading partner. You received the following message: {message}. You may make an offer, counter-offer, ask questions, or decline to engage."
+
+Offer Phase: "Enter the item you are willing to offer: A, B, C, or D"
+Commitment Phase: "Your trading partner has offered {item} for your {item}. Will you accept?"
+
+
+Elicitation Probe (I am unsure if this will really be that valuable given our current implementation):
+"Please answer the following questions as carefully and honestly as you can.
+This is separate from your current negotiation activity."
+    
+1. "Rate each good from 1 (very low value to you) to 10 (very high value): A: ?, B: ?, C: ?, D: ?"    
+2. "Rank the goods from most to least valuable to you (e.g. "C > A > D > B")"    
+3. "If you could receive one additional unit of any good right now, which would you choose and why?"    
+4. "Describe your ideal inventory in your own words (what would you most like to be holding at the end of this simulation?)"
+
+Logging: 
+
+For Prompts:
+Trade History: "Trade N: Accepted/Declined {num}x{item} for {num}x{item}" (obviously the amount won't matter for our current implementation but we can scale it.)
+Negotiation History: Log every message received from current negotiation partner, just put directly into negotiation_history
+I think we might also need to store valuable information they learn each round, such as which items are more valuable to others, but I think we'd need to discuss further with Wagner about how best to implement that.
+
+For our purposes:
+We need to store all messages sent and all trades completed in an easily readable format: i.e.
+
+Agent Pair 1-2:
+Round 1:
+1: {message}
+2: {message}
+Round 2:
+etc.
+
+Proposed Trade:
+1: {num}x{item]
+2: {num}x{item}
+Accepted:
+{yes/no}
+
+Starting inventory:
+1: {item_cat}x{num}...
+2: {item_cat}x{num}...
+Starting Score:
+1: Douglas-Cobb+Action State
+2: Douglas-Cobb+Action State
+
+Final Inventory:
+1: {item_cat}x{num}...
+2: {item_cat}x{num}...
+Final Score:
+1: Douglas-Cobb+Action State
+2: Douglas-Cobb+Action State
+
+
+
+
+
+
+
+
