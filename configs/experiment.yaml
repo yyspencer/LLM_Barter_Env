@@ -1,0 +1,131 @@
+#temporary
+experiment:
+  name: barter_v1_four_model_test
+  description: >
+    Four-player barter experiment with abstract goods A-D, one player per model,
+    Cobb-Douglas terminal utility, and round-robin pairwise negotiation.
+
+  seed: 42
+  num_runs: 5
+
+market:
+  num_players: 4
+  goods:
+    - A
+    - B
+    - C
+    - D
+
+  # Total rounds = round_multiplier * (num_players - 1)
+  round_multiplier: 1
+  max_rounds_override: null
+
+pairing:
+  mode: round_robin
+  allow_repeat_pairings_within_cycle: false
+  reshuffle_between_runs: true
+
+mechanism:
+  execution_mode: sequential
+  negotiation_turns_per_agent: 5
+  action_space: one_for_one
+  anonymous: false
+  broadcast_completed_trades: false
+  mediator_enabled: false
+  allow_no_trade: true
+
+trade_rules:
+  require_mutual_acceptance: true
+  allow_counteroffers: true
+  enforce_inventory_constraints: true
+  integer_goods_only: true
+  min_units_per_side: 1
+  max_units_per_side: 1
+
+utility:
+  terminal_utility:
+    type: shifted_cobb_douglas
+    shift: 1.0
+    normalize_weights: true
+
+  # This is the action-value layer used during evaluation.
+  # v1 uses a simple approximation:
+  # Q(s,a) = delta_terminal_utility + lambda * delta_scarcity_value
+  state_action_value:
+    enabled: true
+    method: scarcity_augmented
+    lambda_weight: 1.0
+
+    scarcity:
+      enabled: true
+      demand_term: unmet_weighted_demand
+      supply_term: circulating_supply
+      smoothing_constant: 1.0
+
+    time_factor:
+      enabled: false
+      method: linear_decay
+      beta: 0.0
+
+initialization:
+  utilities:
+    mode: manual_or_seeded
+    require_weights_sum_to_one: true
+
+  endowments:
+    mode: manual_or_seeded
+    require_nonnegative_integer_entries: true
+    avoid_initial_optimal_bundle: true
+    require_gains_from_trade_exist: true
+
+  personas:
+    mode: generated_from_preferences
+    include_exact_formula_in_prompt: false
+
+stopping:
+  stop_after_all_rounds: true
+  stop_if_no_trades_for_n_rounds: null
+  stop_if_market_converged: false
+
+logging:
+  output_dir: runs
+  save_config_snapshot: true
+  save_event_jsonl: true
+  save_trade_json: true
+  save_summary_json: true
+  save_raw_prompts: true
+  save_raw_model_outputs: true
+  pretty_print_transcripts: true
+
+  filenames:
+    events: events.jsonl
+    trades: trades.json
+    summary: summary.json
+    metrics: metrics.json
+
+evaluation:
+  enabled: true
+
+  benchmark_action:
+    # v1 compares each player to the best feasible action
+    # with the current partner only.
+    scope: current_partner_only
+
+  metrics:
+    terminal_utility: true
+    state_action_value: true
+    regret: true
+    weighted_l1_action_distance: true
+    cosine_similarity: false
+    top_k_action_rank: false
+
+  weighted_distance:
+    use_item_weights: true
+    use_state_action_weights: true
+
+preference_drift:
+  enabled: false
+  probe_rounds:
+    - pre
+    - mid
+    - post
