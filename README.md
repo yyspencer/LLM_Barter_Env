@@ -1,4 +1,4 @@
-# LLM_Barter_Env
+# LLM Barter Env
 
 ## Environment Setup
 
@@ -22,3 +22,6 @@ Analysis code requires jupyter notebook, register the environment as a notebook 
 ```bash
 python -m ipykernel install --user --name barter --display-name "barter"
 ```
+
+## API Keys
+Change the API keys in .env
