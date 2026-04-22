@@ -1,4 +1,4 @@
-# LLM Barter Env
+# LLM Barter Experiment
 
 ## Environment Setup
 
@@ -6,8 +6,7 @@ This project supports both **Conda** and **pip** workflows.
 Most users should use the **Conda** setup.
 
 ### Option 1: Conda (recommended)
-Create and activate the environment:
-
+Create and activate the environment
 ```bash
 conda env create -f environment.yml
 conda activate barter
@@ -17,7 +16,6 @@ conda activate barter
 ```bash
 pip install -r requirements.txt
 ```
-
 Analysis code requires jupyter notebook, register the environment as a notebook kernel:
 ```bash
 python -m ipykernel install --user --name barter --display-name "barter"
@@ -34,20 +32,20 @@ Copy it and create your own private .env file with the same variable names. Just
 ## Configs
 This project is designed to be configuration-driven. The main config files control the experiment, model assignments, prompts, and evaluation settings.
 ### models.yaml
-Defines:
-which providers/models are available
-which environment variable contains each provider’s API key
-generation settings such as temperature and token limits
-how many players in the experiment use each model
+Defines:  
+which providers/models are available   
+which environment variable contains each provider’s API key  
+generation settings such as temperature and token limits  
+how many players in the experiment use each model  
 ### experiment.yaml
-Defines the market setup, including:
-number of players
-number of goods
-number of rounds
-matching rule
-mechanism settings such as sequential vs. simultaneous execution
-broadcast / anonymity options
-random seed and repeated-run settings
+Defines the market setup, including:  
+number of players  
+number of goods  
+number of rounds  
+matching rule  
+mechanism settings such as sequential vs. simultaneous execution  
+broadcast / anonymity options  
+random seed and repeated-run settings  
 
 ### prompts.yaml
 
