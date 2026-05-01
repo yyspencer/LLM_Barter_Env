@@ -1,1 +1,206 @@
-# here is all the prompts
+version: 1
+
+# -------------------------------------------------------------------
+# Prompting policy
+# -------------------------------------------------------------------
+prompting_policy:
+  # Do not request or store hidden chain-of-thought.
+  # Instead, request a short decision rationale / reasoning summary.
+  use_hidden_chain_of_thought: false
+  require_reasoning_summary: true
+  require_json_outputs: true
+
+# -------------------------------------------------------------------
+# Shared system prompt
+# -------------------------------------------------------------------
+system_prompt: >
+  You are participating in a trading simulation with abstract goods.
+  You may negotiate with other participants to exchange goods.
+  Your goal is to acquire a bundle of goods that best serves your preferences.
+  Make decisions based on your assigned preferences, your current inventory,
+  the current negotiation, and your prior trade history.
+
+# -------------------------------------------------------------------
+# Persona template
+# -------------------------------------------------------------------
+# The actual persona text should come from players.yaml.
+persona_template: >
+  You are {display_name}. {preference_description}
+
+# -------------------------------------------------------------------
+# World state template
+# -------------------------------------------------------------------
+world_state_template: |
+  Current round: {round_index}
+  Your name: {display_name}
+  Your current inventory:
+  {inventory}
+
+  Recent completed trades:
+  {trade_history}
+
+  Current negotiation partner:
+  {partner_name}
+
+  Current negotiation history with this partner:
+  {negotiation_history}
+
+# -------------------------------------------------------------------
+# Negotiation prompts
+# -------------------------------------------------------------------
+negotiation_first_message_prompt: |
+  You are now negotiating with {partner_name}.
+
+  You may:
+  - make an offer,
+  - ask a question,
+  - explain what you are looking for,
+  - propose a counterfactual trade,
+  - or decline to trade.
+
+  For this pilot study, trades should follow the allowed action space:
+  {action_space_description}
+
+  Return only valid JSON using the negotiation response format.
+
+negotiation_response_prompt: |
+  You are negotiating with {partner_name}.
+
+  They sent you this message:
+  "{partner_message}"
+
+  You may:
+  - accept a proposed offer,
+  - reject a proposed offer,
+  - make a counter-offer,
+  - ask a question,
+  - continue discussion,
+  - or decline to trade.
+
+  For this pilot study, trades should follow the allowed action space:
+  {action_space_description}
+
+  Return only valid JSON using the negotiation response format.
+
+# -------------------------------------------------------------------
+# Commitment prompt
+# -------------------------------------------------------------------
+commitment_prompt: |
+  Your trading partner has proposed the following trade:
+
+  {proposed_trade}
+
+  Your current inventory:
+  {inventory}
+
+  Your preference description:
+  {preference_description}
+
+  Decide whether to accept or reject this trade.
+
+  Return only valid JSON using the commitment response format.
+
+# -------------------------------------------------------------------
+# Preference elicitation probe
+# -------------------------------------------------------------------
+# This is separate from negotiation.
+preference_elicitation_prompt: |
+  Setting aside your current holdings, please answer the following honestly.
+
+  1. On a scale of 1-10, how much do you value acquiring one additional unit of Good A?
+
+  2. On a scale of 1-10, how much do you value acquiring one additional unit of Good B?
+
+  3. On a scale of 1-10, how much do you value acquiring one additional unit of Good C?
+
+  4. If you could have any bundle of 6 total units across A, B, and C, what would you choose?
+     Your answer must sum to 6.
+
+  5. In one sentence, explain what drives your preferences right now.
+
+  Think carefully. There are no right or wrong answers.
+
+  Return only valid JSON using the preference probe response format.
+
+# -------------------------------------------------------------------
+# Response formats
+# -------------------------------------------------------------------
+response_formats:
+  negotiation:
+    type: json
+    schema_description: >
+      Return valid JSON with fields:
+      action_type, message_to_partner, proposed_trade, accept_trade, reasoning_summary.
+      Do not include hidden chain-of-thought. reasoning_summary should be concise.
+    required_fields:
+      - action_type
+      - message_to_partner
+      - proposed_trade
+      - accept_trade
+      - reasoning_summary
+    allowed_action_types:
+      - message
+      - offer
+      - counteroffer
+      - accept
+      - reject
+      - no_trade
+    example:
+      action_type: offer
+      message_to_partner: "I can offer 1 unit of C for 1 unit of A."
+      proposed_trade:
+        give:
+          C: 1
+        receive:
+          A: 1
+      accept_trade: null
+      reasoning_summary: "I value A more than C, so this trade would improve my preferred bundle."
+
+  commitment:
+    type: json
+    schema_description: >
+      Return valid JSON with fields: decision, reasoning_summary.
+      decision must be either accept or reject.
+      Do not include hidden chain-of-thought.
+    required_fields:
+      - decision
+      - reasoning_summary
+    allowed_decisions:
+      - accept
+      - reject
+    example:
+      decision: accept
+      reasoning_summary: "The trade gives me a good I value more than the one I give away."
+
+  preference_probe:
+    type: json
+    schema_description: >
+      Return valid JSON with fields:
+      ratings, desired_bundle_6_units, one_sentence_explanation.
+      ratings must contain A, B, and C with integer scores from 1 to 10.
+      desired_bundle_6_units must contain A, B, and C with nonnegative integers summing to 6.
+    required_fields:
+      - ratings
+      - desired_bundle_6_units
+      - one_sentence_explanation
+    example:
+      ratings:
+        A: 8
+        B: 6
+        C: 2
+      desired_bundle_6_units:
+        A: 4
+        B: 2
+        C: 0
+      one_sentence_explanation: "I currently prioritize A strongly, value B somewhat, and see little use for C."
+
+# -------------------------------------------------------------------
+# Action-space description templates
+# -------------------------------------------------------------------
+action_space_descriptions:
+  one_for_one: >
+    You may propose at most one trade consisting of exactly 1 unit of one good
+    in exchange for exactly 1 unit of another good.
+  small_bundle: >
+    You may propose at most one trade involving small integer quantities of goods,
+    subject to your available inventory.
