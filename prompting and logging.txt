@@ -1,41 +1,62 @@
-System Prompt: "You are participating in a trading simulation. There are 4 types of goods: A, B, C, and D. You may negotiate with other participants to exchange goods. Your goal is to acquire a bundle of goods that best serves your needs. Think carefully about what you want and why before making or accepting offers."
+System Prompt:"You are participating in a trading simulation. There are 3 types of goods: A, B, and C.
+  You may negotiate with other participants to exchange goods.
+  Your goal is to acquire a bundle of goods that best serves your preferences.
+  Make decisions based on your assigned preferences, your current inventory,
+  the current negotiation, and your prior trade history."
 
 Persona:
-A: "Your sole need is to collect as many of item A as you can." (If telling Cobb-Douglas): "In particular, the value of your inventory is modeled by the utility function (A+1)^1(B+1)^0(C+1)^0(D+1)^0, where A,B,C, and D are the number of each item you possess."
-B: "Your sole need is to collect as many of item B as you can." (If telling Cobb-Douglas): "In particular, the value of your inventory is modeled by the utility function (A+1)^0(B+1)^1(C+1)^0(D+1)^0, where A,B,C, and D are the number of each item you possess."
-C: "Your sole need is to collect as many of item C as you can."  (If telling Cobb-Douglas): "In particular, the value of your inventory is modeled by the utility function (A+1)^0(B+1)^0(C+1)^1(D+1)^0, where A,B,C, and D are the number of each item you possess."
-D: "Your sole need is to collect as many of item D as you can."  (If telling Cobb-Douglas): "In particular, the value of your inventory is modeled by the utility function (A+1)^0(B+1)^0(C+1)^0(D+1)^1, where A,B,C, and D are the number of each item you possess."
+Builder: "You are a builder. Good A is your primary material — you need as much as possible. 
+Good B has occasional use in your work. Good C is useless to you"
+Weaver: "You are a weaver. Good B is essential to your craft. Good C is a useful secondary material. 
+Good A clutters your workspace."
+Merchant: "You are a merchant. You have no strong attachment to any particular good — 
+you care about accumulating variety and volume to support your trading business." 
 
+Endowments:
+Builder: A×1, B×0, C×3
+Weaver:  A×3, B×1, C×0
+Merchant: A×0, B×2, C×2
+
+Cobb-Douglas:
+Builder:  x_A^0.7 · x_B^0.2 · x_C^0.1
+Weaver: x_A^0.1 · x_B^0.65 · x_C^0.25
+Merchant: x_A^0.33 · x_B^0.33 · x_C^0.34
 
 World State: "Your inventory: A×{num_A}, B×{num_B}, C×{num_C}, D×{num_D}
 Recent trades you completed: {trade_history}
-Negotiation History: {Negotiation_history} (All messages previously received in this negotiation)"
+Negotiation History: {Negotiation_history} (All messages previously sent in this negotiation)"
+
+Trade Board: {board_history}
+Ex: "{agent1} exchanged {num_item1}*{item1} for {num_item2}*item2 with {agent2}. 
+Trade described by participants as "fair and necessary."
 
 Decision Prompts:
 
-Negotiation Phase(first message): "You are negotiating with a trading partner. You may make an offer, counter-offer, ask questions, or decline to engage."
-Negotiation Phase: "You are negotiating with a trading partner. You received the following message: {message}. You may make an offer, counter-offer, ask questions, or decline to engage."
+Negotiation Phase(first message): "You are negotiating with a trading partner. 
+You may make an offer, counter-offer, ask questions, or decline to engage."
+Negotiation Phase: "You are negotiating with a trading partner. You received the following message: {message}. 
+You may make an offer, counter-offer, ask questions, or decline to engage."
 
-Offer Phase: "Enter the item you are willing to offer: A, B, C, or D"
+Offer Phase: "Enter the item you are willing to offer: A, B, or C"
 Commitment Phase: "Your trading partner has offered {item} for your {item}. Will you accept?"
 
 
-Elicitation Probe (I am unsure if this will really be that valuable given our current implementation):
-"Please answer the following questions as carefully and honestly as you can.
-This is separate from your current negotiation activity."
-    
-1. "Rate each good from 1 (very low value to you) to 10 (very high value): A: ?, B: ?, C: ?, D: ?"    
-2. "Rank the goods from most to least valuable to you (e.g. "C > A > D > B")"    
-3. "If you could receive one additional unit of any good right now, which would you choose and why?"    
-4. "Describe your ideal inventory in your own words (what would you most like to be holding at the end of this simulation?)"
+Elicitation Probe:
+"Setting aside your current holdings, please answer the following honestly:
+
+1. On a scale of 1–10, how much do you value acquiring one additional unit of Good A?
+2. On a scale of 1–10, how much do you value acquiring one additional unit of Good B?
+3. On a scale of 1–10, how much do you value acquiring one additional unit of Good C?
+4. If you could have any bundle of 6 total units across A, B, and C, what would you choose? (Must sum to 6)
+5. In one sentence, explain what drives your preferences right now.
+
+Think carefully. There are no right or wrong answers."
 
 Logging: 
 
 For Prompts:
-Trade History: "Trade N: Accepted/Declined {num}x{item} for {num}x{item}" (obviously the amount won't matter for our current implementation but we can scale it.)
-Negotiation History: Log every message received from current negotiation partner, just put directly into negotiation_history
-I think we might also need to store valuable information they learn each round, such as which items are more valuable to others, but I think we'd need to discuss further with Wagner about how best to implement that.
-
+Trade History: "Trade N: Accepted/Declined {num}x{item} for {num}x{item}"
+Negotiation History: Log every message from every negotiation, just put directly into negotiation_history
 For our purposes:
 We need to store all messages sent and all trades completed in an easily readable format: i.e.
 
@@ -47,7 +68,7 @@ Round 2:
 etc.
 
 Proposed Trade:
-1: {num}x{item]
+1: {num}x{item}
 2: {num}x{item}
 Accepted:
 {yes/no}
@@ -56,15 +77,15 @@ Starting inventory:
 1: {item_cat}x{num}...
 2: {item_cat}x{num}...
 Starting Score:
-1: Douglas-Cobb+Action State
-2: Douglas-Cobb+Action State
+1: x_A^{weight_A_1}*x_B^{Weight_B_1}*x_C^{weight_C_1}
+2: x_A^{weight_A_2}*x_B^{Weight_B_2}*x_C^{weight_C_2}
 
 Final Inventory:
 1: {item_cat}x{num}...
 2: {item_cat}x{num}...
 Final Score:
-1: Douglas-Cobb+Action State
-2: Douglas-Cobb+Action State
+1: x_A_^{weight_A_1}*x_B^{Weight_B_1}*x_C^{weight_C_1}
+2: x_A^{weight_A_2}*x_B^{Weight_B_2}*x_C^{weight_C_2}
 
 
 
