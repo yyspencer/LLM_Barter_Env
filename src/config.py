@@ -5,9 +5,12 @@ Loads and validates:
 - experiment.yaml
 - models.yaml
 - players.yaml
+- prompts.yaml
 - .env API keys
 
-Prompts are intentionally optional/deferred for now.
+This module does not run the experiment. It only loads the configuration files,
+validates that they are mutually consistent, and returns a structured config
+object that the runner can use.
 """
 
 from __future__ import annotations
@@ -239,6 +242,11 @@ class PlayerSpec(BaseModel):
     utility_weights: Dict[str, float]
     preference_description: str
 
+    # Optional metadata fields used by the preference-drift pilot.
+    role: Optional[str] = None
+    utility_type: Optional[str] = None
+    utility_formula: Optional[str] = None
+
     # Filled after linking to models.yaml
     model: Optional[ModelSpec] = None
 
@@ -257,6 +265,50 @@ class PlayersConfig(BaseModel):
 
 
 # ------------------------------------------------------------
+# Prompt config schemas
+# ------------------------------------------------------------
+
+class PromptingPolicyConfig(BaseModel):
+    use_hidden_chain_of_thought: bool = False
+    require_reasoning_summary: bool = True
+    require_json_outputs: bool = True
+
+
+class ResponseFormatConfig(BaseModel):
+    type: str = "json"
+    schema_description: str = ""
+    required_fields: List[str] = Field(default_factory=list)
+    allowed_action_types: Optional[List[str]] = None
+    allowed_decisions: Optional[List[str]] = None
+    example: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PromptsConfig(BaseModel):
+    version: float | str
+    prompting_policy: PromptingPolicyConfig
+
+    system_prompt: str
+    persona_template: str
+
+    world_state_control_template: str
+    world_state_broadcast_template: str
+
+    negotiation_first_message_prompt: str
+    negotiation_response_prompt: str
+    commitment_prompt: str
+    preference_elicitation_prompt: str
+
+    response_formats: Dict[str, ResponseFormatConfig]
+    action_space_descriptions: Dict[str, str]
+    logging: Dict[str, Any] = Field(default_factory=dict)
+
+    # Optional/deprecated fields. Allowed temporarily while refactoring.
+    personas: Optional[Dict[str, str]] = None
+    endowments: Optional[Dict[str, Dict[str, int]]] = None
+    utility_functions: Optional[Dict[str, Any]] = None
+
+
+# ------------------------------------------------------------
 # Combined loaded config
 # ------------------------------------------------------------
 
@@ -264,6 +316,7 @@ class LoadedConfig(BaseModel):
     experiment: ExperimentConfig
     models: ModelsConfig
     players: PlayersConfig
+    prompts: Optional[PromptsConfig] = None
 
 
 # ------------------------------------------------------------
@@ -400,11 +453,68 @@ def validate_parallel_pairing_settings(experiment: ExperimentConfig) -> None:
             )
 
 
+def validate_prompts_against_experiment(
+    experiment: ExperimentConfig,
+    prompts: Optional[PromptsConfig],
+) -> None:
+    """
+    Lightweight prompt validation.
+
+    Ensures the experiment's action_space has a matching action-space
+    description in prompts.yaml.
+    """
+    if prompts is None:
+        return
+
+    action_space = experiment.mechanism.action_space
+    if action_space not in prompts.action_space_descriptions:
+        raise ValueError(
+            f"experiment.mechanism.action_space='{action_space}', but prompts.yaml "
+            f"does not define action_space_descriptions.{action_space}."
+        )
+
+    required_response_formats = {"negotiation", "commitment", "preference_probe"}
+    found = set(prompts.response_formats.keys())
+    missing = required_response_formats - found
+    if missing:
+        raise ValueError(
+            f"prompts.yaml missing response_formats entries: {sorted(missing)}"
+        )
+
+
+def validate_prompts_are_prompt_only(prompts: Optional[PromptsConfig]) -> None:
+    """
+    Warn if prompts.yaml still contains player/experiment settings that should
+    live in players.yaml.
+
+    This does not fail, because keeping the loader permissive is useful while
+    refactoring.
+    """
+    if prompts is None:
+        return
+
+    misplaced = []
+    if prompts.personas is not None:
+        misplaced.append("personas")
+    if prompts.endowments is not None:
+        misplaced.append("endowments")
+    if prompts.utility_functions is not None:
+        misplaced.append("utility_functions")
+
+    if misplaced:
+        print(
+            "WARNING: prompts.yaml contains fields that should usually live in "
+            f"players.yaml, not prompts.yaml: {misplaced}"
+        )
+
+
 def validate_all(config: LoadedConfig) -> None:
     validate_players_against_experiment(config.experiment, config.players)
     validate_players_against_models(config.models, config.players)
     validate_model_counts_against_players(config.models, config.players)
     validate_parallel_pairing_settings(config.experiment)
+    validate_prompts_against_experiment(config.experiment, config.prompts)
+    validate_prompts_are_prompt_only(config.prompts)
 
 
 # ------------------------------------------------------------
@@ -415,13 +525,16 @@ def load_config(
     experiment_path: str | Path = "configs/experiment.yaml",
     models_path: str | Path = "configs/models.yaml",
     players_path: str | Path = "configs/players.yaml",
+    prompts_path: str | Path | None = "configs/prompts.yaml",
     env_path: str | Path = ".env",
     require_api_keys: bool = True,
+    require_prompts: bool = True,
 ) -> LoadedConfig:
     """
     Load all required config files for v1.
 
-    prompts.yaml is intentionally skipped for now.
+    prompts.yaml is supported. It can be disabled by passing prompts_path=None
+    or require_prompts=False.
     """
 
     env_path = Path(env_path)
@@ -439,6 +552,15 @@ def load_config(
     models = ModelsConfig.model_validate(models_raw)
     players = PlayersConfig.model_validate(players_raw)
 
+    prompts: Optional[PromptsConfig] = None
+    if prompts_path is not None:
+        prompts_path = Path(prompts_path)
+        if prompts_path.exists():
+            prompts_raw = load_yaml(prompts_path)
+            prompts = PromptsConfig.model_validate(prompts_raw)
+        elif require_prompts:
+            raise FileNotFoundError(f"Prompts config file not found: {prompts_path}")
+
     if require_api_keys:
         attach_api_keys(models)
 
@@ -446,6 +568,7 @@ def load_config(
         experiment=experiment,
         models=models,
         players=players,
+        prompts=prompts,
     )
 
     validate_all(config)
@@ -478,6 +601,12 @@ def print_config_summary(config: LoadedConfig) -> None:
     print(f"  Execution: {exp.mechanism.execution_mode}")
     print(f"  Synchronization: {exp.mechanism.synchronization}")
     print(f"  Negotiation turns per agent: {exp.mechanism.negotiation_turns_per_agent}")
+    print(f"  Action space: {exp.mechanism.action_space}")
+
+    print("\nPreference Drift")
+    print(f"  Enabled: {exp.preference_drift.enabled}")
+    print(f"  Probe mode: {exp.preference_drift.probe_schedule.mode}")
+    print(f"  Probe interval: {exp.preference_drift.probe_schedule.interval_rounds}")
 
     print("\nModels")
     for model in config.models.enabled_models():
@@ -490,10 +619,31 @@ def print_config_summary(config: LoadedConfig) -> None:
 
     print("\nPlayers")
     for player in config.players.players:
-        print(f"  {player.id} ({player.display_name})")
+        role_text = f", role={player.role}" if player.role else ""
+        print(f"  {player.id} ({player.display_name}{role_text})")
         print(f"    model_id: {player.model_id}")
         print(f"    inventory: {player.inventory}")
         print(f"    utility_weights: {player.utility_weights}")
+        if player.utility_formula:
+            print(f"    utility_formula: {player.utility_formula}")
+
+    print("\nPrompts")
+    if config.prompts is None:
+        print("  prompts.yaml: not loaded")
+    else:
+        print(f"  prompts.yaml: loaded, version={config.prompts.version}")
+        print(
+            "  JSON outputs required: "
+            f"{config.prompts.prompting_policy.require_json_outputs}"
+        )
+        print(
+            "  Hidden chain-of-thought requested: "
+            f"{config.prompts.prompting_policy.use_hidden_chain_of_thought}"
+        )
+        print(
+            "  Available action-space descriptions: "
+            f"{', '.join(config.prompts.action_space_descriptions.keys())}"
+        )
 
     print("=" * 60)
 
@@ -503,7 +653,9 @@ if __name__ == "__main__":
         experiment_path="configs/experiment.yaml",
         models_path="configs/models.yaml",
         players_path="configs/players.yaml",
+        prompts_path="configs/prompts.yaml",
         env_path=".env",
         require_api_keys=True,
+        require_prompts=True,
     )
     print_config_summary(cfg)
