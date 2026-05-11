@@ -27,60 +27,8 @@ system_prompt: >
 persona_template: >
   You are {display_name}. {preference_description}
 
-# Persona definitions (referenced by players.yaml)
-personas:
-  Builder: >
-    You are a builder. Good A is your primary material — you need as much as possible.
-    Good B has occasional use in your work. Good C is useless to you.
-  Weaver: >
-    You are a weaver. Good B is essential to your craft. Good C is a useful secondary material.
-    Good A clutters your workspace.
-  Merchant: >
-    You are a merchant. You have no strong attachment to any particular good —
-    you care about accumulating variety and volume to support your trading business.
-
 # -------------------------------------------------------------------
-# Endowments (starting inventories)
-# -------------------------------------------------------------------
-endowments:
-  Builder:
-    A: 1
-    B: 0
-    C: 3
-  Weaver:
-    A: 3
-    B: 1
-    C: 0
-  Merchant:
-    A: 0
-    B: 2
-    C: 2
-
-# -------------------------------------------------------------------
-# Utility functions (Cobb-Douglas)
-# -------------------------------------------------------------------
-utility_functions:
-  Builder:
-    formula: "x_A^0.7 * x_B^0.2 * x_C^0.1"
-    exponents:
-      A: 0.7
-      B: 0.2
-      C: 0.1
-  Weaver:
-    formula: "x_A^0.1 * x_B^0.65 * x_C^0.25"
-    exponents:
-      A: 0.1
-      B: 0.65
-      C: 0.25
-  Merchant:
-    formula: "x_A^0.33 * x_B^0.33 * x_C^0.34"
-    exponents:
-      A: 0.33
-      B: 0.33
-      C: 0.34
-
-# -------------------------------------------------------------------
-# World state template
+# World state templates
 # -------------------------------------------------------------------
 world_state_control_template: |
   Current round: {round_index}
@@ -143,12 +91,6 @@ negotiation_response_prompt: |
   {action_space_description}
 
   Return only valid JSON using the negotiation response format.
-
-# -------------------------------------------------------------------
-# Offer prompt
-# -------------------------------------------------------------------
-offer_prompt: |
-  Enter the item you are willing to offer: A, B, or C.
 
 # -------------------------------------------------------------------
 # Commitment prompt
@@ -277,39 +219,31 @@ action_space_descriptions:
 # Logging formats
 # -------------------------------------------------------------------
 logging:
-
-  # Per-prompt trade history string (injected into world_state_template)
   trade_history_entry: "Trade {trade_n}: {decision} {num_give}×{item_give} for {num_receive}×{item_receive}"
-  # decision values: Accepted | Declined
 
-  # Per-prompt negotiation history (injected directly — log every message verbatim)
-
-  # Full session log (human-readable, stored externally)
   session_log_format: |
     Agent Pair {agent1}-{agent2}:
 
       Starting Inventory:
-        {agent1}: {item_cat}×{num} ...
-        {agent2}: {item_cat}×{num} ...
+        {agent1}: {inventory_1}
+        {agent2}: {inventory_2}
 
-      Starting Score:
-        {agent1}: x_A^{weight_A_1} * x_B^{weight_B_1} * x_C^{weight_C_1}
-        {agent2}: x_A^{weight_A_2} * x_B^{weight_B_2} * x_C^{weight_C_2}
+      Starting Utility:
+        {agent1}: {utility_1}
+        {agent2}: {utility_2}
 
       Round {round_n}:
-        {agent1}: {message}
-        {agent2}: {message}
-        ...
+        {agent1}: {message_1}
+        {agent2}: {message_2}
 
       Proposed Trade:
-        {agent1}: {num}×{item}
-        {agent2}: {num}×{item}
-        Accepted: {yes|no}
+        {proposed_trade}
+        Accepted: {yes_or_no}
 
       Final Inventory:
-        {agent1}: {item_cat}×{num} ...
-        {agent2}: {item_cat}×{num} ...
+        {agent1}: {final_inventory_1}
+        {agent2}: {final_inventory_2}
 
-      Final Score:
-        {agent1}: x_A^{weight_A_1} * x_B^{weight_B_1} * x_C^{weight_C_1}
-        {agent2}: x_A^{weight_A_2} * x_B^{weight_B_2} * x_C^{weight_C_2}
+      Final Utility:
+        {agent1}: {final_utility_1}
+        {agent2}: {final_utility_2}
