@@ -1,0 +1,130 @@
+version: 1
+
+experiment:
+  name: preference_drift_v1_parallel_pairs
+  description: >
+    Multi-agent barter environment for measuring stated and revealed preference
+    drift under repeated pairwise negotiation. Agents trade in independent pairs
+    within each round, and all pairs in the same round can be run in parallel.
+  seed: 42
+  num_runs: 1
+
+market:
+  goods:
+    - A
+    - B
+    - C
+  num_players: 6
+
+rounds:
+  # Total scheduled rounds = round_multiplier * (num_players - 1)
+  # For round_robin_pairing, num_players - 1 gives one full cycle when num_players is even.
+  mode: round_robin
+  round_multiplier: 1
+  max_rounds_override: null
+
+pairing:
+  # Each round creates disjoint pairs. Since each player appears in at most one
+  # pair per round, all pairs in that round can be negotiated in parallel.
+  mode: round_robin_disjoint_pairs
+  allow_repeat_pairings_within_cycle: false
+  reshuffle_between_runs: true
+  handle_odd_player_count: bye
+
+mechanism:
+  # Parallel within a round, synchronized between rounds.
+  # The runner should:
+  # 1. create all disjoint pairs for the current round
+  # 2. run all pair negotiations concurrently
+  # 3. resolve accepted trades after all pairs finish
+  # 4. update inventories
+  # 5. move to the next round
+  execution_mode: parallel_pairs
+  synchronization: end_of_round
+
+  negotiation_turns_per_agent: 5
+  action_space: one_for_one
+  allow_no_trade: true
+  require_mutual_acceptance: true
+  enforce_inventory_constraints: true
+  integer_goods_only: true
+
+  anonymous: false
+  broadcast_completed_trades: false
+  mediator_enabled: false
+
+trade_rules:
+  require_mutual_acceptance: true
+  allow_counteroffers: true
+  enforce_inventory_constraints: true
+  integer_goods_only: true
+  min_units_per_side: 1
+  max_units_per_side: 1
+
+  # For v1, conflicts should not happen because players appear in only one pair
+  # per round. This is here for future scalability.
+  conflict_resolution:
+    enabled: true
+    method: reject_conflicting_trades
+
+utility:
+  terminal_utility:
+    type: shifted_cobb_douglas
+    shift: 1.0
+    normalize_weights: true
+
+preference_drift:
+  enabled: true
+
+  # Survey/probe schedule.
+  # interval_rounds means: run a preference probe every r completed rounds.
+  # Examples:
+  #   interval_rounds: 1  -> after every round
+  #   interval_rounds: 5  -> after every 5 rounds
+  #   interval_rounds: 10 -> after every 10 rounds
+  probe_schedule:
+    mode: interval_rounds
+    interval_rounds: 5
+    include_pre_probe: true
+    include_post_probe: true
+
+  # Store the elicited stated preferences separately from trade logs.
+  save_probe_responses: true
+
+initialization:
+  utilities:
+    mode: manual
+    require_weights_sum_to_one: true
+
+  endowments:
+    mode: manual
+    require_nonnegative_integer_entries: true
+    avoid_initial_optimal_bundle: true
+    require_gains_from_trade_exist: true
+
+  personas:
+    mode: generated_from_preferences
+    include_exact_formula_in_prompt: false
+
+stopping:
+  stop_after_all_rounds: true
+  stop_if_no_trades_for_n_rounds: null
+  stop_if_market_converged: false
+
+logging:
+  output_dir: runs
+  save_config_snapshot: true
+  save_event_jsonl: true
+  save_trade_json: true
+  save_summary_json: true
+  save_raw_prompts: true
+  save_raw_model_outputs: true
+  save_preference_probes: true
+  pretty_print_transcripts: true
+
+  filenames:
+    events: events.jsonl
+    trades: trades.json
+    summary: summary.json
+    preference_probes: preference_probes.json
+    transcripts: transcripts.txt
