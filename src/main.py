@@ -94,9 +94,9 @@ def cmd_mock_run(cfg) -> None:
  
  
 def cmd_run(cfg) -> None:
-    """Run with real LLM providers. Not yet implemented."""
-    print("ERROR: --run mode is not yet implemented. Use --mock-run to test the pipeline.")
-    sys.exit(1)
+    """Run with real GPT-5.4 API calls."""
+    from runner import run_gpt_experiment
+    run_gpt_experiment(cfg)
  
  
 def main() -> None:

@@ -77,14 +77,23 @@ preference_drift:
   enabled: true
 
   # Survey/probe schedule.
-  # interval_rounds means: run a preference probe every r completed rounds.
-  # Examples:
-  #   interval_rounds: 1  -> after every round
-  #   interval_rounds: 5  -> after every 5 rounds
-  #   interval_rounds: 10 -> after every 10 rounds
+  #
+  # mode: "midpoint"  -> fire ONE mid-run probe after the middle round,
+  #   computed as (total_rounds + 1) // 2. With the current 5-round run
+  #   this fires after round 3. If you change round_multiplier or
+  #   num_players later, it auto-adjusts to stay in the middle.
+  #
+  # mode: "interval_rounds" -> fire a probe every `interval_rounds`
+  #   completed rounds (after rounds r, 2r, 3r, ...). Recurring. Use this
+  #   if you want repeated probes through the run, e.g. interval_rounds: 1
+  #   probes after every round. Note this is an interval, NOT a midpoint:
+  #   with 5 rounds, interval_rounds: 3 happens to land on round 3, but a
+  #   longer run would also probe at 6, 9, ...
+  #
+  # interval_rounds below is only read when mode is "interval_rounds".
   probe_schedule:
-    mode: interval_rounds
-    interval_rounds: 5
+    mode: midpoint
+    interval_rounds: 3
     include_pre_probe: true
     include_post_probe: true
 

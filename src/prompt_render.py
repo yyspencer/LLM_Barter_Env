@@ -111,12 +111,26 @@ def format_negotiation_history(
     Expected flexible fields:
     - speaker / speaker_id / speaker_name
     - message / content
+
+    Entries with source == "commitment_outcome" are rendered as a distinct
+    system-style note (no "speaker:" prefix) so that an agent can clearly
+    see which offers it has already declined, and why.
     """
     if not negotiation_history:
         return empty_text
 
     lines: list[str] = []
     for msg in negotiation_history:
+        if msg.get("source") == "commitment_outcome":
+            note = msg.get("message") or msg.get("content") or ""
+            lines.append(f"[OFFER DECLINED] {note}")
+            continue
+
+        if msg.get("source") == "accept_failed":
+            note = msg.get("message") or msg.get("content") or ""
+            lines.append(f"[ACCEPT DID NOT REGISTER] {note}")
+            continue
+
         speaker = (
             msg.get("speaker")
             or msg.get("speaker_name")
@@ -281,13 +295,30 @@ def render_commitment_prompt(
 ) -> str:
     """
     Render the commitment prompt for accepting/rejecting a proposed trade.
+
+    proposed_trade is from the *proposer's* perspective:
+        give    = what the proposer (partner) gives   = what YOU receive
+        receive = what the proposer (partner) receives = what YOU give
+
+    We flip the perspective here so the prompt addresses the responder
+    (the player making the commitment decision) directly, avoiding any
+    ambiguity about which side of the trade they are on.
     """
     inventory_text = format_inventory_for_prompt(player.inventory, goods, style="lines")
-    proposed_trade_text = format_json_block(proposed_trade)
+
+    partner_gives = proposed_trade.get("give", {}) or {}
+    partner_receives = proposed_trade.get("receive", {}) or {}
+
+    # From the responder's point of view:
+    #   they_give = what the partner hands over = partner's "give"
+    #   you_give  = what you must hand over    = partner's "receive"
+    they_give_text = format_goods_dict(partner_gives)
+    you_give_text  = format_goods_dict(partner_receives)
 
     return safe_format(
         prompts.commitment_prompt,
-        proposed_trade=proposed_trade_text,
+        they_give=they_give_text,
+        you_give=you_give_text,
         inventory=inventory_text,
         preference_description=player.preference_description,
         display_name=player.display_name,

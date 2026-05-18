@@ -61,12 +61,16 @@ world_state_broadcast_template: |
 negotiation_first_message_prompt: |
   You are now negotiating with {partner_name}.
 
-  You may:
-  - make an offer,
-  - ask a question,
-  - explain what you are looking for,
-  - propose a counterfactual trade,
-  - or decline to trade.
+  On your turn you may:
+  - make an offer (action_type "offer"): propose a trade. Your partner
+    will then separately accept or reject it. You MUST set
+    action_type to "offer" AND fill in proposed_trade. Describing a
+    trade only in the message text does NOT create an offer
+  - send a message or ask a question (action_type "message"): explain
+    what you are looking for. The negotiation continues afterward.
+  - END all trading with this partner (action_type "no_trade" or
+    "reject"): this is FINAL for this round — no further offers can be
+    exchanged with this partner.
 
   For this pilot study, trades should follow the allowed action space:
   {action_space_description}
@@ -79,13 +83,23 @@ negotiation_response_prompt: |
   They sent you this message:
   "{partner_message}"
 
-  You may:
-  - accept a proposed offer,
-  - reject a proposed offer,
-  - make a counter-offer,
-  - ask a question,
-  - continue discussion,
-  - or decline to trade.
+  On your turn you may:
+  - accept your partner's most recent offer (action_type "accept"):
+    that trade executes immediately. Only use "accept" if your partner
+    has actually made a formal offer (action_type "offer" or
+    "counteroffer") that is still standing.
+  - make an offer or counter-offer (action_type "offer" or
+    "counteroffer"): propose a different trade. Your partner will then
+    separately accept or reject it.
+  - send a message or ask a question (action_type "message"): the
+    negotiation continues afterward.
+  - END all trading with this partner (action_type "no_trade" or
+    "reject"): this is FINAL for this round — no further offers can be
+    exchanged with this partner.
+
+  Remember: inventories are fixed for the duration of this negotiation.
+  Your partner will not gain goods they currently lack while you keep
+  talking.
 
   For this pilot study, trades should follow the allowed action space:
   {action_space_description}
@@ -98,15 +112,20 @@ negotiation_response_prompt: |
 commitment_prompt: |
   Your trading partner has proposed the following trade:
 
-  {proposed_trade}
+  They will give you: {they_give}
+  You will give them: {you_give}
 
-  Your current inventory:
-  {inventory}
+  Your current inventory: {inventory}
 
-  Your preference description:
-  {preference_description}
+  Your preference description: {preference_description}
 
-  Decide whether to accept or reject this trade.
+  Decide whether to ACCEPT or REJECT this specific offer.
+
+  - ACCEPT: this exact trade executes immediately and both inventories
+    update. 
+  - REJECT: you decline ONLY this one offer. This does NOT end trading.
+
+  Only evaluate utility based on what YOU are giving and receiving.
 
   Return only valid JSON using the commitment response format.
 
@@ -139,9 +158,42 @@ response_formats:
   negotiation:
     type: json
     schema_description: >
-      Return valid JSON with fields:
+      Return valid JSON with these exact fields:
       action_type, message_to_partner, proposed_trade, accept_trade, reasoning_summary.
       Do not include hidden chain-of-thought. reasoning_summary should be concise.
+
+      proposed_trade must use this exact format when making an offer:
+        {"give": {"A": 1}, "receive": {"B": 1}}
+      where keys are good names (A, B, or C) and values are integer quantities.
+      Do NOT use {"give": {"good": "A", "quantity": 1}} — that format is wrong.
+      Set proposed_trade to null if you are not making an offer.
+
+      action_type must be one of: message, offer, counteroffer, accept, reject, no_trade.
+      accept_trade must be true if accepting a prior offer, false if rejecting, null otherwise.
+
+      Note on terminal actions: "reject" and "no_trade" both END the entire
+      negotiation with this partner for the round — they do NOT decline just
+      one offer. Declining a single offer is handled separately in the
+      commitment step. Use "offer"/"counteroffer" or "message" if you still
+      want to keep trading.
+
+      Example response for making an offer:
+      {
+        "action_type": "offer",
+        "message_to_partner": "I can offer 1 unit of C for 1 unit of A.",
+        "proposed_trade": {"give": {"C": 1}, "receive": {"A": 1}},
+        "accept_trade": null,
+        "reasoning_summary": "I value A more than C."
+      }
+
+      Example response for accepting:
+      {
+        "action_type": "accept",
+        "message_to_partner": "I accept your offer.",
+        "proposed_trade": null,
+        "accept_trade": true,
+        "reasoning_summary": "This trade improves my bundle."
+      }
     required_fields:
       - action_type
       - message_to_partner
@@ -169,9 +221,24 @@ response_formats:
   commitment:
     type: json
     schema_description: >
-      Return valid JSON with fields: decision, reasoning_summary.
-      decision must be either accept or reject.
-      Do not include hidden chain-of-thought.
+      Return valid JSON with these fields: decision, reasoning_summary.
+
+      decision must be exactly "accept" or "reject".
+      reasoning_summary is a concise rationale (no hidden chain-of-thought).
+
+      "accept" means this exact proposed trade executes now.
+      "reject" means you decline ONLY this specific offer. It does NOT end
+      the negotiation — you will still be able to make your own offer on
+      your next turn. Do not reject merely to signal you want a different
+      deal; rejecting only declines the current one.
+
+      Example accept:
+        {"decision": "accept",
+         "reasoning_summary": "This trade improves my bundle."}
+
+      Example reject:
+        {"decision": "reject",
+         "reasoning_summary": "I cannot afford to give the proposed amount."}
     required_fields:
       - decision
       - reasoning_summary
