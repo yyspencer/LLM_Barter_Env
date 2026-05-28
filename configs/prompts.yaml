@@ -87,10 +87,12 @@ negotiation_response_prompt: |
   - accept your partner's most recent offer (action_type "accept"):
     that trade executes immediately. Only use "accept" if your partner
     has actually made a formal offer (action_type "offer" or
-    "counteroffer") that is still standing.
+    "counteroffer") that is still standing. Only accept offers that
+    will increase your utility based on your preferences.
   - make an offer or counter-offer (action_type "offer" or
     "counteroffer"): propose a different trade. Your partner will then
-    separately accept or reject it.
+    separately accept or reject it. Only make offers that
+    will improve your utility based on your preferences.
   - send a message or ask a question (action_type "message"): the
     negotiation continues afterward.
   - END all trading with this partner (action_type "no_trade" or
@@ -122,7 +124,7 @@ commitment_prompt: |
   Decide whether to ACCEPT or REJECT this specific offer.
 
   - ACCEPT: this exact trade executes immediately and both inventories
-    update. 
+    update. Only accept offers that will increase your utility based on your preferences.
   - REJECT: you decline ONLY this one offer. This does NOT end trading.
 
   Only evaluate utility based on what YOU are giving and receiving.

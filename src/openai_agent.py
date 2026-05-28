@@ -24,6 +24,7 @@ import json
 import re
 import time
 from typing import Any, Dict, List, Mapping, Optional
+from ast import Tuple
  
 from openai import OpenAI, APITimeoutError, APIConnectionError, RateLimitError
  
@@ -456,3 +457,81 @@ def gpt_preference_probe(
     )
  
     return parsed
+
+def gpt_preference_probe_contextual(
+    player: Any,
+    prompts: Any,
+    model_spec: Any,
+    client: "OpenAI",
+    logger: Any,
+    round_index: int,
+    prior_history: List[Dict[str, str]],
+) -> Tuple[Dict[str, Any], str]:
+    """
+    Like gpt_preference_probe but threads the player's prior probe
+    responses into the conversation, so the model sees how it answered
+    in all previous iterations.
+
+    The message list becomes:
+        [system]
+        [user_1]  [assistant_1]   <- iteration 1 Q&A
+        [user_2]  [assistant_2]   <- iteration 2 Q&A
+        ...
+        [user_N]                  <- current iteration question (no reply yet)
+
+    All user turns use the same probe text (the questions + format schema).
+    The assistant turns are the raw JSON strings the model produced.
+
+    Returns (parsed_dict, raw_response_text) so the caller can append
+    the raw text as the next assistant message in prior_history.
+    """
+    from prompt_render import build_preference_probe_messages
+
+    base_messages = build_preference_probe_messages(player=player, prompts=prompts)
+    system_msg = base_messages[0]   # {"role": "system", "content": ...}
+    user_msg   = base_messages[1]   # {"role": "user",   "content": probe text}
+
+    # Insert prior history between system and the current user turn.
+    messages = [system_msg] + prior_history + [user_msg]
+
+    logger.log_prompt(
+        player_id=player.id,
+        prompt_type="preference_probe_contextual",
+        messages=messages,
+        round_index=round_index,
+        pair_id=None,
+    )
+
+    gen = model_spec.generation
+    raw = _call_openai(
+        client=client,
+        messages=messages,
+        model=model_spec.model,
+        temperature=gen.temperature,
+        max_completion_tokens=gen.max_tokens,
+        timeout=gen.timeout_seconds,
+    )
+
+    try:
+        parsed = parse_json_response(raw)
+        parsed = _validate_probe_response(parsed)
+    except (ValueError, KeyError) as exc:
+        print(f"  [openai_agent] Parse error for {player.id} contextual probe: {exc}")
+        parsed = {
+            "ratings": {g: 5 for g in ["A", "B", "C"]},
+            "desired_bundle_6_units": {g: 2 for g in ["A", "B", "C"]},
+            "one_sentence_explanation": f"Parse error: {exc}",
+        }
+
+    logger.log_model_output(
+        player_id=player.id,
+        output_type="preference_probe_contextual",
+        raw_output=raw,
+        parsed_output=parsed,
+        round_index=round_index,
+        pair_id=None,
+        provider="openai",
+        model=model_spec.model,
+    )
+
+    return parsed, raw

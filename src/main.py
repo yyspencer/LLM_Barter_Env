@@ -4,14 +4,18 @@ main.py
 Entry point for the LLM barter experiment.
  
 Modes:
-  --dry-run    Validate configs and print the pairing schedule. No API calls.
-  --mock-run   Run the full experiment with deterministic mock agents. No API calls.
-  --run        Run the full experiment with real LLM providers. (Not yet implemented.)
+  --dry-run      Validate configs and print the pairing schedule. No API calls.
+  --mock-run     Run the full experiment with deterministic mock agents. No API calls.
+  --run          Run the full experiment with real LLM providers.
+  --random       Run a no-intelligence baseline where agents trade randomly. No API calls.
+  --probe-only   Run only preference probes (no trading) to measure LLM drift.
  
 Usage:
   python src/main.py --dry-run
   python src/main.py --mock-run
-  python src/main.py --mock-run --skip-api-key-check
+  python src/main.py --random
+  python src/main.py --probe-only --probe-only-count 10
+  python src/main.py --run
 """
  
 from __future__ import annotations
@@ -97,6 +101,18 @@ def cmd_run(cfg) -> None:
     """Run with real GPT-5.4 API calls."""
     from runner import run_gpt_experiment
     run_gpt_experiment(cfg)
+
+
+def cmd_random_run(cfg) -> None:
+    """Random-baseline run: agents trade uniformly at random. No API calls."""
+    from runner import run_random_experiment
+    run_random_experiment(cfg)
+
+
+def cmd_probe_only(cfg, count: int, with_context: bool) -> None:
+    """Probe-only run: repeated preference probes with no trading."""
+    from runner import run_probe_only_experiment
+    run_probe_only_experiment(cfg, count=count, with_context=with_context)
  
  
 def main() -> None:
@@ -105,9 +121,11 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Modes:
-  --dry-run    Validate configs and print the pairing schedule (no API calls).
-  --mock-run   Run the full experiment with deterministic mock agents (no API calls).
-  --run        Run with real LLM providers (not yet implemented).
+  --dry-run      Validate configs and preview pairing schedule (no API calls).
+  --mock-run     Run full experiment with deterministic mock agents (no API calls).
+  --run          Run full experiment with real LLM providers.
+  --random       Random-baseline run for comparing against intelligent agents (no API calls).
+  --probe-only   Run only preference probes (no trading) to measure LLM drift.
         """,
     )
  
@@ -126,7 +144,52 @@ Modes:
     mode_group.add_argument(
         "--run",
         action="store_true",
-        help="Run full experiment with real LLM providers. (Not yet implemented.)",
+        help="Run full experiment with real LLM providers.",
+    )
+    mode_group.add_argument(
+        "--random",
+        action="store_true",
+        help=("Random-baseline run: every agent proposes a uniformly random "
+              "1-for-1 trade and accepts/rejects via coin flip. No API calls."),
+    )
+    mode_group.add_argument(
+        "--probe-only",
+        action="store_true",
+        help=("Run only preference probes (no trading) to measure LLM drift. "
+              "Requires OPENAI_API_KEY. Number of probes set via "
+              "--probe-only-count (default 10)."),
+    )
+ 
+    # Mode-specific options
+    parser.add_argument(
+        "--probe-only-count",
+        type=int,
+        default=10,
+        help="Number of probe iterations per player in --probe-only mode (default: 10).",
+    )
+    parser.add_argument(
+        "--probe-only-context",
+        action="store_true",
+        default=False,
+        help=(
+            "In --probe-only mode, include each player's prior probe responses "
+            "in the context window of subsequent probes. Without this flag each "
+            "probe is an independent fresh call. With this flag the conversation "
+            "grows as [system, Q1, A1, Q2, A2, ..., QN], so the model sees all "
+            "its own previous answers. Run both conditions to compare drift with "
+            "and without self-memory. Output dirs are suffixed _probe_only vs "
+            "_probe_only_context so they are always kept separate."
+        ),
+    )
+    parser.add_argument(
+        "--num-runs",
+        type=int,
+        default=1,
+        help=("Number of repeated runs to execute back-to-back (default: 1). "
+              "Each run gets its own output directory; the seed is incremented "
+              "per run so pairings and random choices differ. Useful for "
+              "averaging out variance, especially with --random and --run. "
+              "Ignored by --dry-run."),
     )
  
     # Config paths
@@ -157,9 +220,14 @@ Modes:
     )
  
     args = parser.parse_args()
+
+    if args.num_runs < 1:
+        parser.error(f"--num-runs must be >= 1 (got {args.num_runs})")
  
-    # Mock run never needs real API keys
-    require_keys = not args.skip_api_key_check and not args.mock_run
+    # API keys are needed for any run that actually calls an LLM.
+    # That's --run and --probe-only. Everything else is offline.
+    needs_keys_by_default = args.run or args.probe_only
+    require_keys = needs_keys_by_default and not args.skip_api_key_check
  
     cfg = load_config(
         experiment_path=Path(args.experiment),
@@ -168,13 +236,55 @@ Modes:
         env_path=Path(args.env),
         require_api_keys=require_keys,
     )
- 
+
+    # --dry-run is just a config sanity check; repeating it is pointless,
+    # so it ignores --num-runs and runs once.
     if args.dry_run:
         cmd_dry_run(cfg)
-    elif args.mock_run:
-        cmd_mock_run(cfg)
-    elif args.run:
-        cmd_run(cfg)
+        return
+
+    # For every other mode, run --num-runs times. Each iteration bumps the
+    # seed (so pairing schedules and random-baseline RNG actually differ)
+    # and tags the experiment name with the run index (so the output dirs
+    # are obviously grouped). The base values are restored at the end so
+    # callers reusing cfg afterward see no side effects.
+    base_seed = cfg.experiment.experiment.seed
+    base_name = cfg.experiment.experiment.name
+
+    # Snapshot the starting inventories from players.yaml so each run
+    # starts fresh regardless of how the previous run mutated player objects.
+    # (The mock/gpt runners write live post-trade inventories back onto
+    # player.inventory during a run, so without this reset run 2 would
+    # start from run 1's end-state — agents at their Nash equilibrium.)
+    starting_inventories = {
+        p.id: dict(p.inventory) for p in cfg.players.players
+    }
+
+    try:
+        for i in range(args.num_runs):
+            # Restore every player to their yaml-defined starting inventory.
+            for p in cfg.players.players:
+                p.inventory = dict(starting_inventories[p.id])
+
+            if args.num_runs > 1:
+                cfg.experiment.experiment.seed = base_seed + i
+                cfg.experiment.experiment.name = f"{base_name}_run_{i + 1}"
+                bar = "=" * 60
+                print(f"\n{bar}\n=== Run {i + 1} of {args.num_runs} "
+                      f"(seed={cfg.experiment.experiment.seed}) ===\n{bar}")
+
+            if args.mock_run:
+                cmd_mock_run(cfg)
+            elif args.run:
+                cmd_run(cfg)
+            elif args.random:
+                cmd_random_run(cfg)
+            elif args.probe_only:
+                cmd_probe_only(cfg, count=args.probe_only_count,
+                               with_context=args.probe_only_context)
+    finally:
+        cfg.experiment.experiment.seed = base_seed
+        cfg.experiment.experiment.name = base_name
  
  
 if __name__ == "__main__":

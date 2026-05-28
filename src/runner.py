@@ -171,6 +171,7 @@ def run_preference_probes(
     logger: RunLogger,
     cfg: LoadedConfig,
     probe_fn: ProbeFn,
+    label_override: Optional[str] = None,
 ) -> None:
     """
     Run preference elicitation probes for all players.
@@ -179,13 +180,20 @@ def run_preference_probes(
     round_index=-1 -> post-run
     round_index=N  -> mid-experiment after round N
  
+    label_override, if provided, replaces the auto-derived label. Probe-only
+    mode uses this to produce labels like ``probe_1``, ``probe_2``, ... that
+    don't get confused with trade-round numbers.
+ 
     probe_fn signature: (player, round_index) -> dict
     """
-    label = (
-        "pre_run"  if round_index == 0
-        else "post_run" if round_index == -1
-        else f"round_{round_index}"
-    )
+    if label_override is not None:
+        label = label_override
+    else:
+        label = (
+            "pre_run"  if round_index == 0
+            else "post_run" if round_index == -1
+            else f"round_{round_index}"
+        )
  
     for player in players:
         response = probe_fn(player=player, round_index=round_index)
@@ -199,10 +207,15 @@ def run_preference_probes(
             "response": response,
         }
         logger.log_preference_probe(probe_record)
+        # Q5 ("explain what drives your preferences right now") goes into the
+        # transcript alongside the structured ratings/desired bundle so the
+        # transcript alone is a usable summary of probe drift.
+        explanation = (response.get("one_sentence_explanation") or "").strip()
         logger.append_transcript(
             f"[PROBE {label}] {player.display_name}: "
             f"ratings={response['ratings']}, "
-            f"desired={response['desired_bundle_6_units']}\n"
+            f"desired={response['desired_bundle_6_units']}, "
+            f"explanation=\"{explanation}\"\n"
         )
  
  
@@ -657,12 +670,17 @@ def _run_experiment_loop(
     negotiation_fn: NegotiationFn,
     commitment_fn: CommitmentFn,
     probe_fn: ProbeFn,
+    enable_probes: bool = True,
 ) -> RunLogger:
     """
     Core loop shared by all run modes.
  
     Callers construct agent callables and pass them in.
     This function owns all scheduling, inventory management, and summary writing.
+ 
+    When ``enable_probes`` is False, pre/mid/post preference probes are skipped
+    regardless of the drift config. This is used by run modes that don't
+    involve an LLM (e.g. the random baseline), where probes have no meaning.
     """
     exp_cfg = cfg.experiment
     goods   = exp_cfg.market.goods
@@ -686,7 +704,7 @@ def _run_experiment_loop(
  
     # Pre-run probe
     drift_cfg = exp_cfg.preference_drift
-    if drift_cfg.enabled and drift_cfg.probe_schedule.include_pre_probe:
+    if enable_probes and drift_cfg.enabled and drift_cfg.probe_schedule.include_pre_probe:
         logger.append_transcript("\n[PRE-RUN PREFERENCE PROBES]\n")
         run_preference_probes(
             players=players,
@@ -729,7 +747,10 @@ def _run_experiment_loop(
         # been negotiated and applied to inventories, so a probe labelled
         # "after round N" genuinely reflects the state once round N is
         # complete (not the state going into round N).
-        if should_probe(round_index, cfg, total_rounds=total_rounds):
+        if (
+            enable_probes
+            and should_probe(round_index, cfg, total_rounds=total_rounds)
+        ):
             logger.append_transcript(
                 f"\n[MID-RUN PREFERENCE PROBE — after round {round_index}]\n"
             )
@@ -757,7 +778,7 @@ def _run_experiment_loop(
                 break
  
     # Post-run probe
-    if drift_cfg.enabled and drift_cfg.probe_schedule.include_post_probe:
+    if enable_probes and drift_cfg.enabled and drift_cfg.probe_schedule.include_post_probe:
         logger.append_transcript("\n[POST-RUN PREFERENCE PROBES]\n")
         run_preference_probes(
             players=players,
@@ -1042,3 +1063,344 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
  
     print(f"\nGPT run complete. Output written to: {logger.run_dir}")
     return result
+
+# ---------------------------------------------------------------------------
+# Random-baseline experiment entry point
+# ---------------------------------------------------------------------------
+
+def run_random_experiment(cfg: LoadedConfig) -> RunLogger:
+    """
+    Baseline run where every agent trades RANDOMLY but FEASIBLY.
+
+    On its first turn of each pair, the active player enumerates every
+    feasible 1-for-1 trade — i.e. every (give_good, receive_good) pair where
+    the proposer holds at least 1 of give_good, the partner holds at least 1
+    of receive_good, and the two goods are different — and proposes one of
+    those uniformly at random. The responder always accepts. If no feasible
+    1-for-1 trade exists between the two current inventories, the pair
+    simply doesn't trade that round.
+
+    The result is the strongest "no intelligence" baseline: every pair makes
+    a trade whenever any 1-for-1 swap is possible, but the choice of trade
+    is uniformly random with no regard for either side's preferences. No LLM
+    is involved and no preference probes are taken.
+
+    The randomness is seeded from cfg.experiment.experiment.seed so a given
+    config produces a reproducible random transcript.
+    """
+    import random as _random
+
+    exp_cfg = cfg.experiment
+    goods   = exp_cfg.market.goods
+
+    rng = _random.Random(exp_cfg.experiment.seed)
+
+    logger = RunLogger.create(
+        output_dir=exp_cfg.logging.output_dir,
+        experiment_name=exp_cfg.experiment.name + "_random",
+        filenames=dict(exp_cfg.logging.filenames),
+    )
+    logger.log_event("experiment_started", {
+        "experiment_name": exp_cfg.experiment.name + "_random",
+        "mode": "random",
+        "num_players": exp_cfg.market.num_players,
+        "goods": goods,
+        "seed": exp_cfg.experiment.seed,
+    })
+    logger.save_config_files(
+        config_paths=[
+            "configs/experiment.yaml",
+            "configs/models.yaml",
+            "configs/players.yaml",
+            "configs/prompts.yaml",
+        ],
+        loaded_config=cfg,
+    )
+
+    # Live inventory mirror so each turn's random offer reflects what BOTH
+    # players actually hold at that moment. The proposer reads its own
+    # inventory and the partner's so the proposed trade is always feasible
+    # for both sides.
+    live_inv: Dict[str, Inventory] = {
+        p.id: dict(p.inventory) for p in cfg.players.players
+    }
+
+    def negotiation_fn(player, partner, negotiation_history, turn_index,
+                       round_index, pair_id):
+        """First turn: propose a uniformly random feasible 1-for-1 trade.
+        Subsequent turns: end the negotiation (single-shot per pair)."""
+        if turn_index > 0:
+            return {
+                "action_type": "no_trade",
+                "message_to_partner": "",
+                "proposed_trade": None,
+                "accept_trade": None,
+                "reasoning_summary": "random baseline: single-shot per pair",
+            }
+
+        my_inv      = live_inv[player.id]
+        partner_inv = live_inv[partner.id]
+        my_goods      = [g for g, q in my_inv.items()      if q >= 1]
+        partner_goods = [g for g, q in partner_inv.items() if q >= 1]
+
+        # Every (give, receive) pair that is feasible right now: proposer
+        # holds the give-good, partner holds the receive-good, and the two
+        # are different. Uniform random over this set is the natural
+        # "random feasible 1-for-1 trade".
+        feasible = [
+            (g, h) for g in my_goods for h in partner_goods if g != h
+        ]
+        if not feasible:
+            return {
+                "action_type": "no_trade",
+                "message_to_partner": "",
+                "proposed_trade": None,
+                "accept_trade": None,
+                "reasoning_summary": (
+                    "random baseline: no feasible 1-for-1 trade exists "
+                    "between these two inventories"
+                ),
+            }
+        give_good, receive_good = rng.choice(feasible)
+        return {
+            "action_type": "offer",
+            "message_to_partner": f"Random offer: 1×{give_good} for 1×{receive_good}.",
+            "proposed_trade": {"give": {give_good: 1}, "receive": {receive_good: 1}},
+            "accept_trade": None,
+            "reasoning_summary": (
+                "random baseline: uniformly random feasible offer "
+                "constructed from both inventories"
+            ),
+        }
+
+    def commitment_fn(player, proposed_trade, round_index, pair_id):
+        """Always accept. The runner has already validated feasibility before
+        commitment_fn is called, and random offers are constructed to be
+        feasible for both sides, so there is no reason for the baseline to
+        decline."""
+        return {
+            "decision": "accept",
+            "reasoning_summary": "random baseline: always accept feasible offers",
+        }
+
+    def probe_fn(player, round_index):
+        # Probes are disabled for random runs; this only exists to satisfy
+        # the signature of _run_experiment_loop.
+        raise RuntimeError("probe_fn should not be called in random mode")
+
+    # Keep live_inv in sync with applied trades (same pattern as mock/gpt).
+    original_execute = execute_trade
+
+    def synced_execute(proposer_id, responder_id, proposed_trade, inventories):
+        original_execute(proposer_id, responder_id, proposed_trade, inventories)
+        live_inv[proposer_id]  = dict(inventories[proposer_id])
+        live_inv[responder_id] = dict(inventories[responder_id])
+
+    import runner as _self
+    _self.execute_trade = synced_execute
+
+    try:
+        result = _run_experiment_loop(
+            cfg=cfg,
+            logger=logger,
+            mode="random",
+            negotiation_fn=negotiation_fn,
+            commitment_fn=commitment_fn,
+            probe_fn=probe_fn,
+            enable_probes=False,
+        )
+    finally:
+        _self.execute_trade = original_execute
+
+    print(f"\nRandom-baseline run complete. Output written to: {logger.run_dir}")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Probe-only experiment entry point
+# ---------------------------------------------------------------------------
+
+def run_probe_only_experiment(
+    cfg: LoadedConfig,
+    count: int = 10,
+    with_context: bool = False,
+) -> RunLogger:
+    """
+    Run only preference probes — no trading, no pairing, no commitment.
+
+    Used to measure preference drift in the LLM in the absence of any
+    interaction between agents. Inventories stay at their starting values
+    throughout. Each player is probed ``count`` times.
+
+    Two modes controlled by ``with_context``:
+
+    **without context** (default, ``with_context=False``):
+        Each probe is an independent fresh API call — ``[system, user]``.
+        The model has no memory of its own prior answers. This isolates
+        whatever drift comes from the model's own non-determinism.
+
+    **with context** (``with_context=True``):
+        Each probe extends a growing per-player conversation:
+        ``[system, user_1, assistant_1, user_2, assistant_2, ..., user_N]``.
+        The model can see every answer it has given so far and may anchor
+        to or diverge from them. This tests whether exposure to prior
+        self-responses amplifies or suppresses drift.
+
+    Results land in ``preference_probes.json`` with labels
+    ``probe_1`` ... ``probe_N`` so the existing analysis tooling works
+    without modification.
+    """
+    from openai import OpenAI
+    from openai_agent import gpt_preference_probe, gpt_preference_probe_contextual
+    from prompt_render import build_preference_probe_messages
+
+    if count < 1:
+        raise ValueError(f"probe-only count must be >= 1, got {count}")
+
+    exp_cfg = cfg.experiment
+    prompts = cfg.prompts
+
+    if prompts is None:
+        raise ValueError("prompts.yaml must be loaded for a probe-only run.")
+
+    gpt_spec = cfg.models.get_model("gpt")
+    if not gpt_spec.api_key:
+        raise ValueError(
+            "OPENAI_API_KEY is not set. "
+            "Add it to your .env file as OPENAI_API_KEY=sk-..."
+        )
+
+    client = OpenAI(api_key=gpt_spec.api_key)
+
+    mode_tag    = "probe_only_context" if with_context else "probe_only"
+    mode_label  = "with context" if with_context else "no context"
+    exp_name    = exp_cfg.experiment.name + f"_{mode_tag}"
+
+    logger = RunLogger.create(
+        output_dir=exp_cfg.logging.output_dir,
+        experiment_name=exp_name,
+        filenames=dict(exp_cfg.logging.filenames),
+    )
+    logger.log_event("experiment_started", {
+        "experiment_name": exp_name,
+        "mode": mode_tag,
+        "model": gpt_spec.model,
+        "num_players": exp_cfg.market.num_players,
+        "probe_count": count,
+        "with_context": with_context,
+        "seed": exp_cfg.experiment.seed,
+    })
+    logger.save_config_files(
+        config_paths=[
+            "configs/experiment.yaml",
+            "configs/models.yaml",
+            "configs/players.yaml",
+            "configs/prompts.yaml",
+        ],
+        loaded_config=cfg,
+    )
+
+    players = cfg.players.players
+    inventories: Dict[str, Inventory] = {p.id: dict(p.inventory) for p in players}
+
+    logger.append_transcript(
+        "STARTING INVENTORIES (no trading in probe-only mode)\n"
+        + "=" * 60 + "\n"
+    )
+    for player in players:
+        summary = player_starting_utility_summary(player, exp_cfg.market.goods, shift=1.0)
+        logger.append_transcript(
+            f"  {player.display_name} ({player.id}): "
+            f"inv={summary['inventory']}, U={summary['utility']:.4f}\n"
+        )
+
+    logger.append_transcript(
+        f"\n[PROBE-ONLY RUN: {count} repeated probes per player, "
+        f"no inter-agent interaction, context={with_context}]\n"
+    )
+    if with_context:
+        logger.append_transcript(
+            "[Context mode: each probe extends the player's own growing "
+            "conversation — the model sees all its prior answers.]\n"
+        )
+    else:
+        logger.append_transcript(
+            "[No-context mode: each probe is an independent fresh call — "
+            "the model has no memory of prior answers.]\n"
+        )
+
+    # Per-player conversation history, only used in with_context mode.
+    # Each entry is a pair of {"role":"user",...} + {"role":"assistant",...}
+    # messages from the previous iteration.
+    player_histories: Dict[str, List[Dict[str, str]]] = {
+        p.id: [] for p in players
+    }
+
+    for i in range(1, count + 1):
+        logger.append_transcript(f"\n--- Probe iteration {i} of {count} ---\n")
+
+        for player in players:
+            if with_context:
+                # Build the user message so we can append it to history.
+                base_msgs    = build_preference_probe_messages(player, prompts)
+                user_msg     = base_msgs[1]
+
+                parsed, raw  = gpt_preference_probe_contextual(
+                    player=player,
+                    prompts=prompts,
+                    model_spec=gpt_spec,
+                    client=client,
+                    logger=logger,
+                    round_index=i,
+                    prior_history=player_histories[player.id],
+                )
+                # Append this Q&A turn so the next iteration sees it.
+                player_histories[player.id].extend([
+                    user_msg,
+                    {"role": "assistant", "content": raw},
+                ])
+            else:
+                parsed = gpt_preference_probe(
+                    player=player,
+                    prompts=prompts,
+                    model_spec=gpt_spec,
+                    client=client,
+                    logger=logger,
+                    round_index=i,
+                )
+
+            # Log and write to transcript (same path for both modes).
+            probe_record = {
+                "round_index": i,
+                "probe_label": f"probe_{i}",
+                "player_id": player.id,
+                "display_name": player.display_name,
+                "current_inventory": dict(inventories[player.id]),
+                "response": parsed,
+                "with_context": with_context,
+            }
+            logger.log_preference_probe(probe_record)
+            explanation = (parsed.get("one_sentence_explanation") or "").strip()
+            logger.append_transcript(
+                f"[PROBE probe_{i}] {player.display_name}: "
+                f"ratings={parsed['ratings']}, "
+                f"desired={parsed['desired_bundle_6_units']}, "
+                f"explanation=\"{explanation}\"\n"
+            )
+
+    summary = {
+        "experiment_name": exp_name,
+        "mode": mode_tag,
+        "with_context": with_context,
+        "num_players": exp_cfg.market.num_players,
+        "probe_count": count,
+        "model": gpt_spec.model,
+        "seed": exp_cfg.experiment.seed,
+    }
+    logger.set_summary(summary)
+    logger.log_event("experiment_completed", {"summary": summary})
+    logger.finalize()
+
+    print(f"\nProbe-only run ({mode_label}, {count} probes per player) complete. "
+          f"Output written to: {logger.run_dir}")
+    return logger
