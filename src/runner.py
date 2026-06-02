@@ -297,69 +297,20 @@ def run_pair_negotiation(
         )
  
         action_type = action["action_type"]
- 
-        # --- Explicit accept of partner's last offer ---
-        if action_type == "accept" and action.get("accept_trade"):
-            last_offer = None
-            for entry in reversed(negotiation_history[:-1]):
-                if entry["speaker_id"] == other.id and entry.get("proposed_trade"):
-                    last_offer = entry["proposed_trade"]
-                    break
- 
-            if last_offer is None:
-                # The partner never made a real offer (e.g. they only
-                # described a trade in a message). The accept cannot go
-                # through, but this must NOT end the negotiation — just
-                # skip this turn and let negotiation continue.
-                logger.append_transcript(
-                    f"  [ACCEPT IGNORED: {current.display_name} tried to "
-                    f"accept, but {other.display_name} has no standing "
-                    f"offer. A trade must be made with action_type "
-                    f"\"offer\", not described in a message.]\n"
-                )
-                negotiation_history.append({
-                    "turn": turn,
-                    "speaker_id": current.id,
-                    "speaker": current.display_name,
-                    "action_type": "system_note",
-                    "message": (
-                        f"{current.display_name} attempted to ACCEPT, but "
-                        f"there is no standing offer from "
-                        f"{other.display_name} to accept. Nothing was "
-                        f"traded. To put a real offer on the table an agent "
-                        f"must use action_type \"offer\" with a "
-                        f"proposed_trade — describing a trade only in a "
-                        f"message does NOT create an offer. The negotiation "
-                        f"continues."
-                    ),
-                    "proposed_trade": None,
-                    "accept_trade": None,
-                    "source": "accept_failed",
-                })
-                continue
- 
-            ok, reason = validate_trade(
-                proposer_id=other.id,
-                responder_id=current.id,
-                proposed_trade=last_offer,
-                inventories=inventories,
-                cfg=cfg,
-            )
-            if ok:
-                result.update({
-                    "trade_accepted": True,
-                    "proposed_trade": last_offer,
-                    "proposer_id": other.id,
-                    "responder_id": current.id,
-                    "rejection_reason": None,
-                })
-                break
- 
-            # The accept referenced a real offer but the resulting trade is
-            # infeasible (e.g. the accepter cannot supply their side). Do
-            # not end the negotiation — skip the turn and continue.
+
+        # --- "accept" is NOT a valid standalone negotiation action ---
+        # Acceptance happens only in the commitment phase, at the moment a
+        # trade is offered to a player. An agent cannot accept an earlier
+        # offer on its own turn. If an agent emits "accept" anyway — often a
+        # sign it placed its real offer in the wrong field — treat it as a
+        # harmless no-op and continue. Crucially, we NEVER execute a stale
+        # prior offer, which is the bug this prevents.
+        if action_type == "accept":
             logger.append_transcript(
-                f"  [ACCEPT IGNORED: validation failed — {reason}]\n"
+                f"  [ACCEPT IGNORED: {current.display_name} used \"accept\" "
+                f"on their own turn. Offers can only be accepted at the "
+                f"moment they are made, not after the fact. Nothing was "
+                f"traded.]\n"
             )
             negotiation_history.append({
                 "turn": turn,
@@ -367,11 +318,14 @@ def run_pair_negotiation(
                 "speaker": current.display_name,
                 "action_type": "system_note",
                 "message": (
-                    f"{current.display_name} attempted to ACCEPT "
-                    f"{other.display_name}'s offer, but that trade is not "
-                    f"feasible ({reason}). Nothing was traded. The "
-                    f"negotiation continues; a feasible trade may still be "
-                    f"proposed."
+                    f"{current.display_name} tried to ACCEPT on their own "
+                    f"turn, but offers can only be accepted at the instant "
+                    f"they are offered (when the partner makes the offer, "
+                    f"the other player is asked to accept or reject it right "
+                    f"then). You cannot accept an earlier offer after the "
+                    f"fact. Nothing was traded. If you want a particular "
+                    f"trade, propose it yourself with action_type \"offer\" "
+                    f"and a proposed_trade. The negotiation continues."
                 ),
                 "proposed_trade": None,
                 "accept_trade": None,

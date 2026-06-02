@@ -173,6 +173,12 @@ def _validate_negotiation_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
     if missing:
         raise ValueError(f"Negotiation response missing fields: {missing}")
  
+    # "accept" is no longer a valid standalone action (acceptance happens
+    # only at the moment an offer is made). We still recognise it here so a
+    # stray "accept" passes through to the runner, which turns it into a
+    # harmless no-op with an explanatory note, rather than being silently
+    # coerced to "message" and losing that feedback. The runner never
+    # executes a stale prior offer.
     allowed_types = {"message", "offer", "counteroffer", "accept", "reject", "no_trade"}
     if parsed.get("action_type") not in allowed_types:
         # Coerce unknown types to "message" rather than crashing

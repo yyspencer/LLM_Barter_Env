@@ -84,14 +84,9 @@ negotiation_response_prompt: |
   "{partner_message}"
 
   On your turn you may:
-  - accept your partner's most recent offer (action_type "accept"):
-    that trade executes immediately. Only use "accept" if your partner
-    has actually made a formal offer (action_type "offer" or
-    "counteroffer") that is still standing. Only accept offers that
-    will increase your utility based on your preferences.
   - make an offer or counter-offer (action_type "offer" or
-    "counteroffer"): propose a different trade. Your partner will then
-    separately accept or reject it. Only make offers that
+    "counteroffer"): propose a trade. Your partner will then
+    immediately accept or reject it. Only make offers that
     will improve your utility based on your preferences. You MUST set
     action_type to "offer" AND fill in proposed_trade. Describing a
     trade only in the message text does NOT create an offer
@@ -100,6 +95,12 @@ negotiation_response_prompt: |
   - END all trading with this partner (action_type "no_trade" or
     "reject"): this is FINAL for this round — no further offers can be
     exchanged with this partner.
+
+  You do NOT accept offers on your own turn. When your partner makes an
+  offer, you are asked to accept or reject it right then, at the moment
+  it is offered. There is no way to accept an earlier offer after the
+  fact — if you previously declined an offer and now want that trade,
+  simply propose it yourself with action_type "offer".
 
   Remember: inventories are fixed for the duration of this negotiation.
   Your partner will not gain goods they currently lack while you keep
@@ -172,13 +173,15 @@ response_formats:
       Do NOT use {"give": {"good": "A", "quantity": 1}} — that format is wrong.
       Set proposed_trade to null if you are not making an offer.
 
-      action_type must be one of: message, offer, counteroffer, accept, reject, no_trade.
-      accept_trade must be true if accepting a prior offer, false if rejecting, null otherwise.
+      action_type must be one of: message, offer, counteroffer, reject, no_trade.
+      accept_trade is unused on your own turn — always set it to null.
+      (You do not accept offers on your own turn. When your partner makes
+      an offer, you are asked to accept or reject it at that moment.)
 
       Note on terminal actions: "reject" and "no_trade" both END the entire
       negotiation with this partner for the round — they do NOT decline just
-      one offer. Declining a single offer is handled separately in the
-      commitment step. Use "offer"/"counteroffer" or "message" if you still
+      one offer. Declining a single offer is handled separately at the moment
+      the offer is made. Use "offer"/"counteroffer" or "message" if you still
       want to keep trading.
 
       Example response for making an offer:
@@ -188,15 +191,6 @@ response_formats:
         "proposed_trade": {"give": {"C": 1}, "receive": {"A": 1}},
         "accept_trade": null,
         "reasoning_summary": "I value A more than C."
-      }
-
-      Example response for accepting:
-      {
-        "action_type": "accept",
-        "message_to_partner": "I accept your offer.",
-        "proposed_trade": null,
-        "accept_trade": true,
-        "reasoning_summary": "This trade improves my bundle."
       }
     required_fields:
       - action_type
@@ -208,7 +202,6 @@ response_formats:
       - message
       - offer
       - counteroffer
-      - accept
       - reject
       - no_trade
     example:

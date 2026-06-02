@@ -26,7 +26,7 @@ def validate_inventory_and_weights(
     inventory: Inventory,
     weights: Weights,
     goods: Optional[Iterable[str]] = None,
-    require_weight_sum_one: bool = True,
+    require_weight_sum_one: bool = False,
     tolerance: float = 1e-6,
 ) -> None:
     """
@@ -69,10 +69,9 @@ def validate_inventory_and_weights(
         if amount < 0:
             raise ValueError(f"Inventory quantity for {good} must be nonnegative, got {amount}.")
 
-    for good, weight in weights.items():
-        if weight < 0:
-            raise ValueError(f"Utility weight for {good} must be nonnegative, got {weight}.")
-
+    # Utility weights may be any value (any sum, zero, or negative). No
+    # constraint is enforced here; the only structural requirement is that
+    # weights cover exactly the configured goods, checked above.
     if require_weight_sum_one:
         total = sum(weights.values())
         if abs(total - 1.0) > tolerance:
@@ -102,7 +101,7 @@ def shifted_cobb_douglas(
             inventory=inventory,
             weights=weights,
             goods=goods,
-            require_weight_sum_one=True,
+            require_weight_sum_one=False,
         )
 
     selected_goods = list(goods) if goods is not None else list(weights.keys())
@@ -136,7 +135,7 @@ def log_shifted_cobb_douglas(
             inventory=inventory,
             weights=weights,
             goods=goods,
-            require_weight_sum_one=True,
+            require_weight_sum_one=False,
         )
 
     selected_goods = list(goods) if goods is not None else list(weights.keys())

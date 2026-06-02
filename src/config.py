@@ -381,19 +381,11 @@ def validate_players_against_experiment(
                     f"{good}={amount}. Must be nonnegative integer."
                 )
 
-        weight_sum = sum(player.utility_weights.values())
-        if abs(weight_sum - 1.0) > 1e-6:
-            raise ValueError(
-                f"Player {player.id} utility weights must sum to 1. "
-                f"Current sum={weight_sum}"
-            )
-
-        for good, weight in player.utility_weights.items():
-            if weight < 0:
-                raise ValueError(
-                    f"Player {player.id} has negative utility weight: "
-                    f"{good}={weight}"
-                )
+        # Utility weights may be any value. No constraint is enforced on
+        # their sum or sign — Cobb-Douglas preferences are invariant to
+        # scaling the exponents, and a negative exponent simply makes a good
+        # undesirable (a "bad"). The only structural requirement, checked
+        # above, is that weights are defined for exactly the configured goods.
 
 
 def validate_players_against_models(
