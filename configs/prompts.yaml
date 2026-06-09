@@ -52,7 +52,7 @@ world_state_broadcast_template: |
   Negotiation History:
   {negotiation_history}
 
-  Trade Board:
+  Market Bulletin Board (all completed trades across the market):
   {board_history}
 
 # -------------------------------------------------------------------
@@ -134,6 +134,15 @@ commitment_prompt: |
 
   Return only valid JSON using the commitment response format.
 
+# Context block prepended to the commitment_prompt. Gives the agent the
+# round number and the back-and-forth so far so the accept/reject decision is
+# made in light of the full negotiation, not just the bare offer.
+commitment_context_template: |
+  Round {round_index}.
+
+  Negotiation so far with {partner_name}:
+  {negotiation_history}
+
 # -------------------------------------------------------------------
 # Preference elicitation probe
 # -------------------------------------------------------------------
@@ -155,6 +164,26 @@ preference_elicitation_prompt: |
   Think carefully. There are no right or wrong answers.
 
   Return only valid JSON using the preference probe response format.
+
+# Context block prepended to the preference_elicitation_prompt. Gives the
+# probe a view of where things stand: the round, the agent's current
+# inventory, and the trades they have completed so far.
+probe_context_template: |
+  Round {round_index}.
+
+  Your current inventory: A×{num_A}, B×{num_B}, C×{num_C}
+
+  Recent trades you completed:
+  {trade_history}
+
+# Appended to commitment OR probe context under the broadcast condition only.
+# Exposes the public market bulletin board (the "fair and necessary"
+# framing). This is the channel through which the broadcast experimental
+# condition is expected to induce preference drift, so it must be visible
+# to the probe as well as to negotiation.
+bulletin_board_section_template: |
+  Market Bulletin Board (all completed trades across the market):
+  {board_history}
 
 # -------------------------------------------------------------------
 # Response formats

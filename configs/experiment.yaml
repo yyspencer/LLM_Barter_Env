@@ -20,7 +20,7 @@ rounds:
   # Total scheduled rounds = round_multiplier * (num_players - 1)
   # For round_robin_pairing, num_players - 1 gives one full cycle when num_players is even.
   mode: round_robin
-  round_multiplier: 1
+  round_multiplier: 2
   max_rounds_override: null
 
 pairing:
@@ -92,10 +92,10 @@ preference_drift:
   #
   # interval_rounds below is only read when mode is "interval_rounds".
   probe_schedule:
-    mode: midpoint
-    interval_rounds: 3
+    mode: interval_rounds
+    interval_rounds: 2
     include_pre_probe: true
-    include_post_probe: true
+    include_post_probe: false
 
   # Store the elicited stated preferences separately from trade logs.
   save_probe_responses: true

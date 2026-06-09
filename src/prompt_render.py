@@ -144,12 +144,28 @@ def format_negotiation_history(
 
 
 def format_board_history(
-    board_history: Optional[TradeHistory],
-    empty_text: str = "No public trades have been posted.",
+    board_history: Optional[Any],
+    empty_text: str = "No public trades have been posted yet.",
 ) -> str:
     """
-    Format public trade-board history for broadcast condition.
+    Format the public market bulletin board for the broadcast condition.
+
+    board_history is a list of pre-formatted bulletin strings (one per
+    completed trade), e.g.:
+        "Market Update: Agent 1 exchanged 2×C for 1×A with Agent 4.
+         Trade described by participants as 'fair and necessary.'"
+    They are shown newest-last, one per line. For backward compatibility a
+    list of structured trade dicts is also accepted and delegated to
+    format_trade_history.
     """
+    if not board_history:
+        return empty_text
+
+    # List of plain strings (the bulletin format) -> join directly.
+    if all(isinstance(entry, str) for entry in board_history):
+        return "\n".join(board_history)
+
+    # Fallback: structured trade dicts.
     return format_trade_history(board_history, empty_text=empty_text)
 
 
@@ -327,6 +343,67 @@ def render_commitment_prompt(
     ).strip()
 
 
+def render_commitment_context(
+    prompts,
+    round_index: int,
+    partner_name: str,
+    negotiation_history: Optional[NegotiationHistory],
+) -> str:
+    """
+    Render the context block prepended to the commitment prompt: round number
+    and the negotiation history with the partner up to this offer. Without
+    this, the commitment decision is made on the bare offer text only — with
+    it, the responder evaluates the offer in light of the whole exchange.
+    """
+    return safe_format(
+        prompts.commitment_context_template,
+        round_index=round_index,
+        partner_name=partner_name,
+        negotiation_history=format_negotiation_history(negotiation_history),
+    ).strip()
+
+
+def render_probe_context(
+    player,
+    prompts,
+    goods: Iterable[str],
+    round_index: int,
+    trade_history: Optional[TradeHistory],
+) -> str:
+    """
+    Render the context block prepended to the preference probe: round number,
+    the player's current inventory, and the trades they have completed so far.
+    The probe asks about preferences abstractly, but it does so in the
+    *situated* moment — the agent has just lived through these trades. This is
+    what allows preference drift to be measurable.
+    """
+    inv = dict(player.inventory)
+    return safe_format(
+        prompts.probe_context_template,
+        round_index=round_index,
+        num_A=inv.get("A", 0),
+        num_B=inv.get("B", 0),
+        num_C=inv.get("C", 0),
+        trade_history=format_trade_history(trade_history),
+    ).strip()
+
+
+def render_bulletin_board_section(
+    prompts,
+    board_history: Optional[Any],
+) -> str:
+    """
+    Render the public market bulletin board section. Appended to commitment or
+    probe contexts under the broadcast condition only — this is the channel
+    through which the broadcast experimental condition introduces the
+    "fair and necessary" social framing.
+    """
+    return safe_format(
+        prompts.bulletin_board_section_template,
+        board_history=format_board_history(board_history),
+    ).strip()
+
+
 def render_preference_elicitation_prompt(prompts) -> str:
     """
     Render the preference elicitation probe.
@@ -471,9 +548,19 @@ def build_commitment_messages(
     prompts,
     goods: Iterable[str],
     proposed_trade: Mapping[str, Any],
+    round_index: int = 0,
+    partner_name: str = "your partner",
+    negotiation_history: Optional[NegotiationHistory] = None,
+    board_history: Optional[Any] = None,
+    broadcast: bool = False,
 ) -> list[dict[str, str]]:
     """
     Build chat messages for the commitment phase.
+
+    The commitment now sees the same negotiation history the negotiation
+    phase produced, so the accept/reject decision is made in light of the
+    full back-and-forth rather than the bare offer text. Under the broadcast
+    condition the public market bulletin board is also shown.
     """
     system = "\n\n".join(
         [
@@ -483,14 +570,24 @@ def build_commitment_messages(
     )
 
     user_parts = [
+        render_commitment_context(
+            prompts=prompts,
+            round_index=round_index,
+            partner_name=partner_name,
+            negotiation_history=negotiation_history,
+        ),
+    ]
+    if broadcast:
+        user_parts.append(render_bulletin_board_section(prompts, board_history))
+    user_parts.append(
         render_commitment_prompt(
             player=player,
             prompts=prompts,
             goods=goods,
             proposed_trade=proposed_trade,
-        ),
-        render_response_format_instruction(prompts, "commitment"),
-    ]
+        )
+    )
+    user_parts.append(render_response_format_instruction(prompts, "commitment"))
 
     return [
         {"role": "system", "content": system},
@@ -498,12 +595,23 @@ def build_commitment_messages(
     ]
 
 
-def build_preference_probe_messages(player, prompts) -> list[dict[str, str]]:
+def build_preference_probe_messages(
+    player,
+    prompts,
+    goods: Iterable[str] = ("A", "B", "C"),
+    round_index: int = 0,
+    trade_history: Optional[TradeHistory] = None,
+    board_history: Optional[Any] = None,
+    broadcast: bool = False,
+) -> list[dict[str, str]]:
     """
     Build chat messages for preference elicitation.
 
-    The persona is included so the model remembers its assigned role, but the
-    actual prompt asks it to set aside current holdings.
+    The probe now includes the situated context — round, current inventory,
+    own trade history, and (under broadcast) the public market bulletin board
+    — before the elicitation questions. Without this, the probe is run in a
+    vacuum and the experimental treatment (the "fair and necessary" bulletin)
+    is invisible to it, which makes preference drift unmeasurable.
     """
     system = "\n\n".join(
         [
@@ -513,9 +621,18 @@ def build_preference_probe_messages(player, prompts) -> list[dict[str, str]]:
     )
 
     user_parts = [
-        render_preference_elicitation_prompt(prompts),
-        render_response_format_instruction(prompts, "preference_probe"),
+        render_probe_context(
+            player=player,
+            prompts=prompts,
+            goods=goods,
+            round_index=round_index,
+            trade_history=trade_history,
+        ),
     ]
+    if broadcast:
+        user_parts.append(render_bulletin_board_section(prompts, board_history))
+    user_parts.append(render_preference_elicitation_prompt(prompts))
+    user_parts.append(render_response_format_instruction(prompts, "preference_probe"))
 
     return [
         {"role": "system", "content": system},

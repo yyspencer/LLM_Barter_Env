@@ -23,8 +23,8 @@ from __future__ import annotations
 import json
 import re
 import time
-from typing import Any, Dict, List, Mapping, Optional
-from ast import Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+
  
 from openai import OpenAI, APITimeoutError, APIConnectionError, RateLimitError
  
@@ -354,13 +354,27 @@ def gpt_commitment_decision(
     logger: RunLogger,
     round_index: int,
     pair_id: str,
+    partner_name: str = "your partner",
+    negotiation_history: Optional[List[Dict[str, Any]]] = None,
+    board_history: Optional[List[str]] = None,
+    broadcast: bool = False,
 ) -> Dict[str, Any]:
-    """Call GPT for a commitment decision (accept/reject a finalised trade)."""
+    """Call GPT for a commitment decision (accept/reject a finalised trade).
+
+    Now receives the full negotiation history with the partner (so the
+    decision is made in context of the full exchange) and, under broadcast,
+    the public market bulletin board.
+    """
     messages = build_commitment_messages(
         player=player,
         prompts=prompts,
         goods=goods,
         proposed_trade=proposed_trade,
+        round_index=round_index,
+        partner_name=partner_name,
+        negotiation_history=negotiation_history,
+        board_history=board_history,
+        broadcast=broadcast,
     )
  
     logger.log_prompt(
@@ -417,9 +431,28 @@ def gpt_preference_probe(
     client: OpenAI,
     logger: RunLogger,
     round_index: int,
+    goods: Iterable[str] = ("A", "B", "C"),
+    trade_history: Optional[List[Dict[str, Any]]] = None,
+    board_history: Optional[List[str]] = None,
+    broadcast: bool = False,
 ) -> Dict[str, Any]:
-    """Call GPT for a preference elicitation probe."""
-    messages = build_preference_probe_messages(player=player, prompts=prompts)
+    """Call GPT for a preference elicitation probe.
+
+    The probe now runs in the situated context the agent has just lived
+    through: round, current inventory, own trade history, and (under
+    broadcast) the public market bulletin board. Without this, the probe was
+    run in a vacuum and the broadcast condition's social framing was
+    invisible to it, making drift unmeasurable.
+    """
+    messages = build_preference_probe_messages(
+        player=player,
+        prompts=prompts,
+        goods=goods,
+        round_index=round_index,
+        trade_history=trade_history,
+        board_history=board_history,
+        broadcast=broadcast,
+    )
  
     logger.log_prompt(
         player_id=player.id,
@@ -472,11 +505,16 @@ def gpt_preference_probe_contextual(
     logger: Any,
     round_index: int,
     prior_history: List[Dict[str, str]],
+    goods: Iterable[str] = ("A", "B", "C"),
+    trade_history: Optional[List[Dict[str, Any]]] = None,
+    board_history: Optional[List[str]] = None,
+    broadcast: bool = False,
 ) -> Tuple[Dict[str, Any], str]:
     """
-    Like gpt_preference_probe but threads the player's prior probe
-    responses into the conversation, so the model sees how it answered
-    in all previous iterations.
+    Like gpt_preference_probe but threads the player's prior probe responses
+    into the conversation, so the model sees how it answered in all previous
+    iterations. Also accepts the situated context (inventory, trade history,
+    bulletin board) like gpt_preference_probe.
 
     The message list becomes:
         [system]
@@ -485,15 +523,22 @@ def gpt_preference_probe_contextual(
         ...
         [user_N]                  <- current iteration question (no reply yet)
 
-    All user turns use the same probe text (the questions + format schema).
-    The assistant turns are the raw JSON strings the model produced.
-
-    Returns (parsed_dict, raw_response_text) so the caller can append
-    the raw text as the next assistant message in prior_history.
+    The current user turn carries the most up-to-date context. Each prior
+    user turn was sent with the context as it stood at that time and stays
+    fixed in history. Returns (parsed_dict, raw_response_text) so the caller
+    can append the raw text as the next assistant message in prior_history.
     """
     from prompt_render import build_preference_probe_messages
 
-    base_messages = build_preference_probe_messages(player=player, prompts=prompts)
+    base_messages = build_preference_probe_messages(
+        player=player,
+        prompts=prompts,
+        goods=goods,
+        round_index=round_index,
+        trade_history=trade_history,
+        board_history=board_history,
+        broadcast=broadcast,
+    )
     system_msg = base_messages[0]   # {"role": "system", "content": ...}
     user_msg   = base_messages[1]   # {"role": "user",   "content": probe text}
 

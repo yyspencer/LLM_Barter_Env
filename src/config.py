@@ -296,7 +296,10 @@ class PromptsConfig(BaseModel):
     negotiation_first_message_prompt: str
     negotiation_response_prompt: str
     commitment_prompt: str
+    commitment_context_template: str
     preference_elicitation_prompt: str
+    probe_context_template: str
+    bulletin_board_section_template: str
 
     response_formats: Dict[str, ResponseFormatConfig]
     action_space_descriptions: Dict[str, str]

@@ -172,6 +172,9 @@ def run_preference_probes(
     cfg: LoadedConfig,
     probe_fn: ProbeFn,
     label_override: Optional[str] = None,
+    trade_history: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    bulletin_board: Optional[List[str]] = None,
+    broadcast: bool = False,
 ) -> None:
     """
     Run preference elicitation probes for all players.
@@ -196,7 +199,13 @@ def run_preference_probes(
         )
  
     for player in players:
-        response = probe_fn(player=player, round_index=round_index)
+        response = probe_fn(
+            player=player,
+            round_index=round_index,
+            trade_history=(trade_history or {}).get(player.id),
+            bulletin_board=bulletin_board,
+            broadcast=broadcast,
+        )
  
         probe_record = {
             "round_index": round_index,
@@ -356,6 +365,8 @@ def run_pair_negotiation(
                 proposed_trade=proposed,
                 round_index=round_index,
                 pair_id=pair_id,
+                partner_name=current.display_name,
+                negotiation_history=negotiation_history,
             )
             decision = commitment["decision"]
             reasoning = commitment.get("reasoning_summary", "")
@@ -438,9 +449,20 @@ def run_round(
     trade_history: Dict[str, List[Dict[str, Any]]],
     negotiation_fn: NegotiationFn,
     commitment_fn: CommitmentFn,
+    bulletin_board: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
-    """Run one experiment round for all pairs. Returns trade result records."""
+    """Run one experiment round for all pairs. Returns trade result records.
+
+    If ``bulletin_board`` is provided, a fixed-format market bulletin is
+    appended to it after every accepted trade (broadcast condition). The
+    same list is shared with the negotiation agents so they see all market
+    activity so far when broadcast is enabled.
+    """
     round_trades: List[Dict[str, Any]] = []
+    # Bulletins generated this round are buffered and only merged into the
+    # shared (agent-visible) bulletin_board at END of round, so agents in
+    # round N see bulletins through round N-1 only.
+    pending_bulletins: List[str] = []
  
     logger.append_transcript(f"\n{'=' * 60}\nROUND {round_index}\n{'=' * 60}\n")
     logger.log_event(
@@ -541,6 +563,23 @@ def run_round(
                 f"{inv_before_b} → {dict(inventories[player_b_id])} "
                 f"(utility {util_before_b:.4f} → {util_after_b:.4f})\n"
             )
+
+            # Broadcast condition: append a fixed-format market bulletin for
+            # every accepted trade. The "fair and necessary" framing is
+            # intentional — it injects social framing to probe for preference
+            # drift. The proposer gave `give` and received `receive`.
+            if bulletin_board is not None:
+                proposer_name = player_map[proposer_id].display_name
+                responder_name = player_map[responder_id].display_name
+                give_str = format_goods_dict(proposed["give"])
+                receive_str = format_goods_dict(proposed["receive"])
+                bulletin = (
+                    f"Market Update: {proposer_name} exchanged {give_str} "
+                    f"for {receive_str} with {responder_name}. "
+                    f"Trade described by participants as 'fair and necessary.'"
+                )
+                # Buffer it; visible to agents only at round end.
+                pending_bulletins.append(bulletin)
  
         else:
             reason = pair_result.get("rejection_reason", "unknown")
@@ -566,6 +605,17 @@ def run_round(
             pair_id=pair_id,
         )
  
+    # End of round: publish this round's bulletins so they become visible
+    # to all agents starting next round.
+    if bulletin_board is not None and pending_bulletins:
+        bulletin_board.extend(pending_bulletins)
+        logger.append_transcript(
+            f"\n[MARKET BULLETINS POSTED AT END OF ROUND {round_index} "
+            f"(visible to all agents from next round)]\n"
+        )
+        for b in pending_bulletins:
+            logger.append_transcript(f"  {b}\n")
+
     logger.log_event(
         event_type="round_completed",
         payload={
@@ -625,6 +675,7 @@ def _run_experiment_loop(
     commitment_fn: CommitmentFn,
     probe_fn: ProbeFn,
     enable_probes: bool = True,
+    bulletin_board: Optional[List[str]] = None,
 ) -> RunLogger:
     """
     Core loop shared by all run modes.
@@ -667,6 +718,9 @@ def _run_experiment_loop(
             logger=logger,
             cfg=cfg,
             probe_fn=probe_fn,
+            trade_history=trade_history,
+            bulletin_board=bulletin_board if bulletin_board is not None else None,
+            broadcast=cfg.experiment.mechanism.broadcast_completed_trades,
         )
  
     # Pairing schedule
@@ -694,6 +748,7 @@ def _run_experiment_loop(
             trade_history=trade_history,
             negotiation_fn=negotiation_fn,
             commitment_fn=commitment_fn,
+            bulletin_board=bulletin_board,
         )
         all_trade_records.extend(round_trades)
  
@@ -715,6 +770,9 @@ def _run_experiment_loop(
                 logger=logger,
                 cfg=cfg,
                 probe_fn=probe_fn,
+                trade_history=trade_history,
+                bulletin_board=bulletin_board if bulletin_board is not None else None,
+                broadcast=cfg.experiment.mechanism.broadcast_completed_trades,
             )
  
         n_stop = exp_cfg.stopping.stop_if_no_trades_for_n_rounds
@@ -741,6 +799,9 @@ def _run_experiment_loop(
             logger=logger,
             cfg=cfg,
             probe_fn=probe_fn,
+            trade_history=trade_history,
+            bulletin_board=bulletin_board if bulletin_board is not None else None,
+            broadcast=cfg.experiment.mechanism.broadcast_completed_trades,
         )
  
     # Final summary
@@ -828,6 +889,12 @@ def run_mock_experiment(cfg: LoadedConfig) -> RunLogger:
     # dict separately, so we bind a snapshot at call time via default args.
     starting_inventories = {p.id: dict(p.inventory) for p in cfg.players.players}
  
+    # Market bulletin board (broadcast condition). Mock agents don't read
+    # prompts, so this won't change their behaviour, but it keeps the
+    # bulletin mechanics exercised and visible in the transcript.
+    broadcast = cfg.experiment.mechanism.broadcast_completed_trades
+    bulletin_board: Optional[List[str]] = [] if broadcast else None
+
     def negotiation_fn(player, partner, negotiation_history, turn_index,
                        round_index, pair_id, _inv=starting_inventories):
         # Use the live inventories snapshot passed via the loop's closure
@@ -842,7 +909,7 @@ def run_mock_experiment(cfg: LoadedConfig) -> RunLogger:
         )
  
     def commitment_fn(player, proposed_trade, round_index, pair_id,
-                      _inv=starting_inventories):
+                      _inv=starting_inventories, **_ignored):
         return mock_commitment_decision(
             player_id=player.id,
             inventory=_inv.get(player.id, dict(player.inventory)),
@@ -850,7 +917,7 @@ def run_mock_experiment(cfg: LoadedConfig) -> RunLogger:
             proposed_trade=proposed_trade,
         )
  
-    def probe_fn(player, round_index):
+    def probe_fn(player, round_index, **_ignored):
         return mock_preference_probe(
             player_id=player.id,
             weights=dict(player.utility_weights),
@@ -876,6 +943,7 @@ def run_mock_experiment(cfg: LoadedConfig) -> RunLogger:
             negotiation_fn=negotiation_fn,
             commitment_fn=commitment_fn,
             probe_fn=probe_fn,
+            bulletin_board=bulletin_board if broadcast else None,
         )
     finally:
         _self.execute_trade = original_execute
@@ -949,6 +1017,13 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
     live_inv: Dict[str, Inventory] = {
         p.id: dict(p.inventory) for p in cfg.players.players
     }
+
+    # Shared public market bulletin board for the broadcast condition.
+    # run_round appends a bulletin after every accepted trade; the
+    # negotiation closure below reads the same list so agents see all
+    # market activity so far. Gated by broadcast_completed_trades.
+    broadcast = cfg.experiment.mechanism.broadcast_completed_trades
+    bulletin_board: Optional[List[str]] = [] if broadcast else None
  
     def negotiation_fn(player, partner, negotiation_history, turn_index,
                        round_index, pair_id):
@@ -966,9 +1041,12 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             client=client,
             logger=logger,
             pair_id=pair_id,
+            board_history=bulletin_board if broadcast else None,
+            broadcast=broadcast,
         )
  
-    def commitment_fn(player, proposed_trade, round_index, pair_id):
+    def commitment_fn(player, proposed_trade, round_index, pair_id,
+                      partner_name="your partner", negotiation_history=None):
         player.inventory = live_inv[player.id]
         return gpt_commitment_decision(
             player=player,
@@ -980,9 +1058,16 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             logger=logger,
             round_index=round_index,
             pair_id=pair_id,
+            partner_name=partner_name,
+            negotiation_history=negotiation_history,
+            board_history=bulletin_board if broadcast else None,
+            broadcast=broadcast,
         )
  
-    def probe_fn(player, round_index):
+    def probe_fn(player, round_index, trade_history=None,
+                 bulletin_board=None, broadcast=False):
+        # Patch live inventory so the probe context shows the up-to-date state.
+        player.inventory = live_inv[player.id]
         return gpt_preference_probe(
             player=player,
             prompts=prompts,
@@ -990,6 +1075,10 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             client=client,
             logger=logger,
             round_index=round_index,
+            goods=goods,
+            trade_history=trade_history,
+            board_history=bulletin_board,
+            broadcast=broadcast,
         )
  
     # Wrap execute_trade to keep live_inv in sync with the loop's inventories
@@ -1011,6 +1100,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             negotiation_fn=negotiation_fn,
             commitment_fn=commitment_fn,
             probe_fn=probe_fn,
+            bulletin_board=bulletin_board,
         )
     finally:
         _self.execute_trade = original_execute
@@ -1127,7 +1217,7 @@ def run_random_experiment(cfg: LoadedConfig) -> RunLogger:
             ),
         }
 
-    def commitment_fn(player, proposed_trade, round_index, pair_id):
+    def commitment_fn(player, proposed_trade, round_index, pair_id, **_ignored):
         """Always accept. The runner has already validated feasibility before
         commitment_fn is called, and random offers are constructed to be
         feasible for both sides, so there is no reason for the baseline to

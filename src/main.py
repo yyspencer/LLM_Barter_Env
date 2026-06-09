@@ -218,17 +218,31 @@ Modes:
         action="store_true",
         help="Load configs without requiring API keys (useful for --mock-run).",
     )
- 
+    parser.add_argument(
+        "--broadcast",
+        action="store_true",
+        default=False,
+        help=(
+            "Force the broadcast condition on, overriding experiment.yaml's "
+            "mechanism.broadcast_completed_trades. Under broadcast, every "
+            "accepted trade appends a fixed market bulletin "
+            "(\"Market Update: Agent X exchanged ... with Agent Y. Trade "
+            "described by participants as 'fair and necessary.'\"), and the "
+            "running bulletin board is shown in all negotiation, commitment, "
+            "and preference probe prompts."
+        ),
+    )
+
     args = parser.parse_args()
 
     if args.num_runs < 1:
         parser.error(f"--num-runs must be >= 1 (got {args.num_runs})")
- 
+
     # API keys are needed for any run that actually calls an LLM.
     # That's --run and --probe-only. Everything else is offline.
     needs_keys_by_default = args.run or args.probe_only
     require_keys = needs_keys_by_default and not args.skip_api_key_check
- 
+
     cfg = load_config(
         experiment_path=Path(args.experiment),
         models_path=Path(args.models),
@@ -236,6 +250,11 @@ Modes:
         env_path=Path(args.env),
         require_api_keys=require_keys,
     )
+
+    # --broadcast overrides the config value. We only flip TRUE -> the flag
+    # is opt-in; the default is whatever experiment.yaml says.
+    if args.broadcast:
+        cfg.experiment.mechanism.broadcast_completed_trades = True
 
     # --dry-run is just a config sanity check; repeating it is pointless,
     # so it ignores --num-runs and runs once.
