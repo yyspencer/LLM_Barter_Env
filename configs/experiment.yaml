@@ -20,7 +20,7 @@ rounds:
   # Total scheduled rounds = round_multiplier * (num_players - 1)
   # For round_robin_pairing, num_players - 1 gives one full cycle when num_players is even.
   mode: round_robin
-  round_multiplier: 2
+  round_multiplier: 1
   max_rounds_override: null
 
 pairing:
@@ -51,6 +51,9 @@ mechanism:
 
   anonymous: false
   broadcast_completed_trades: false
+  # Only broadcast trades involving these players. Null = broadcast all trades.
+  # Example: [player_1, player_5] = only trades where agent 1 or 5 participates.
+  broadcast_filter_players: [player_1]
   mediator_enabled: false
 
 trade_rules:

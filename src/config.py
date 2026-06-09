@@ -138,6 +138,7 @@ class MechanismConfig(BaseModel):
     integer_goods_only: bool = True
     anonymous: bool = False
     broadcast_completed_trades: bool = False
+    broadcast_filter_players: Optional[List[str]] = None
     mediator_enabled: bool = False
 
 
@@ -300,6 +301,7 @@ class PromptsConfig(BaseModel):
     preference_elicitation_prompt: str
     probe_context_template: str
     bulletin_board_section_template: str
+    market_bulletin_template: str
 
     response_formats: Dict[str, ResponseFormatConfig]
     action_space_descriptions: Dict[str, str]

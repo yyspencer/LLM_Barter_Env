@@ -569,17 +569,25 @@ def run_round(
             # intentional — it injects social framing to probe for preference
             # drift. The proposer gave `give` and received `receive`.
             if bulletin_board is not None:
-                proposer_name = player_map[proposer_id].display_name
-                responder_name = player_map[responder_id].display_name
-                give_str = format_goods_dict(proposed["give"])
-                receive_str = format_goods_dict(proposed["receive"])
-                bulletin = (
-                    f"Market Update: {proposer_name} exchanged {give_str} "
-                    f"for {receive_str} with {responder_name}. "
-                    f"Trade described by participants as 'fair and necessary.'"
-                )
-                # Buffer it; visible to agents only at round end.
-                pending_bulletins.append(bulletin)
+                # Optional player filter: only broadcast trades involving
+                # specific agents (e.g. broadcast_filter_players: [player_1]).
+                # When null/empty, all trades are broadcast.
+                bfp = cfg.experiment.mechanism.broadcast_filter_players
+                if bfp and proposer_id not in bfp and responder_id not in bfp:
+                    pass  # neither participant is in the filter — skip
+                else:
+                  proposer_name = player_map[proposer_id].display_name
+                  responder_name = player_map[responder_id].display_name
+                  give_str = format_goods_dict(proposed["give"])
+                  receive_str = format_goods_dict(proposed["receive"])
+                  bulletin = cfg.prompts.market_bulletin_template.format(
+                      proposer_name=proposer_name,
+                      give_str=give_str,
+                      receive_str=receive_str,
+                      responder_name=responder_name,
+                  )
+                  # Buffer it; visible to agents only at round end.
+                  pending_bulletins.append(bulletin)
  
         else:
             reason = pair_result.get("rejection_reason", "unknown")
