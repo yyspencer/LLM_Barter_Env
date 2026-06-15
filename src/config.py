@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ------------------------------------------------------------
@@ -127,6 +127,27 @@ class PairingConfig(BaseModel):
     handle_odd_player_count: str = "bye"
 
 
+class BulletinRule(BaseModel):
+    """
+    A single rule for selecting a market-bulletin template based on the
+    trade's participants and goods.
+
+    A rule matches an accepted trade when both:
+      * ``player`` is a participant (either proposer or responder), AND
+      * that player gains the good listed in ``gains`` from the trade.
+
+    If a trade matches multiple rules, the FIRST rule in the list wins.
+    If no rule matches, the default ``market_bulletin_template`` is used.
+
+    ``template`` is the field name of a template in ``prompts.yaml``. The
+    template can use the same placeholders as ``market_bulletin_template``
+    (``proposer_name``, ``give_str``, ``receive_str``, ``responder_name``).
+    """
+    player: str
+    gains: str
+    template: str
+
+
 class MechanismConfig(BaseModel):
     execution_mode: str = "parallel_pairs"
     synchronization: str = "end_of_round"
@@ -139,6 +160,7 @@ class MechanismConfig(BaseModel):
     anonymous: bool = False
     broadcast_completed_trades: bool = False
     broadcast_filter_players: Optional[List[str]] = None
+    bulletin_rules: Optional[List[BulletinRule]] = None
     mediator_enabled: bool = False
 
 
@@ -285,6 +307,11 @@ class ResponseFormatConfig(BaseModel):
 
 
 class PromptsConfig(BaseModel):
+    # Allow user-defined custom template fields (e.g. bulletin variants
+    # referenced from mechanism.bulletin_rules). Anything not in the schema
+    # below is accepted and accessible via getattr(prompts, name).
+    model_config = ConfigDict(extra="allow")
+
     version: float | str
     prompting_policy: PromptingPolicyConfig
 

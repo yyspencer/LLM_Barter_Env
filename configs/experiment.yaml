@@ -1,12 +1,11 @@
 version: 1
 
 experiment:
-  name: condition_1_control_silent_barter
+  name: preference_drift_v1_parallel_pairs
   description: >
-    Condition 1 control. Agents trade through pure bilateral negotiation.
-    Agents receive no public broadcast of completed trades and no separate
-    deliberation phase. Each agent sees only its own current holdings, its own
-    completed trade history, and the current pair negotiation history.
+    Multi-agent barter environment for measuring stated and revealed preference
+    drift under repeated pairwise negotiation. Agents trade in independent pairs
+    within each round, and all pairs in the same round can be run in parallel.
   seed: 42
   num_runs: 1
 
@@ -21,7 +20,7 @@ rounds:
   # Total scheduled rounds = round_multiplier * (num_players - 1)
   # For round_robin_pairing, num_players - 1 gives one full cycle when num_players is even.
   mode: round_robin
-  round_multiplier: 1
+  round_multiplier: 2
   max_rounds_override: null
 
 pairing:
@@ -54,7 +53,25 @@ mechanism:
   broadcast_completed_trades: false
   # Only broadcast trades involving these players. Null = broadcast all trades.
   # Example: [player_1, player_5] = only trades where agent 1 or 5 participates.
-  broadcast_filter_players: [player_1]
+  broadcast_filter_players: [player_1,player_2]
+  # Optional: pick a different bulletin template depending on who's trading
+  # and what they're gaining. Each rule has:
+  #   player:   the agent ID to check
+  #   gains:    the good they need to be gaining (A, B, or C)
+  #   template: the name of a template field in prompts.yaml
+  # A rule matches when `player` is a participant (proposer or responder) and
+  # gains the specified good. First matching rule wins. If no rule matches,
+  # prompts.yaml's market_bulletin_template is used as the fallback.
+  # To disable, set to null.
+  #bulletin_rules: null
+  # Example:
+  bulletin_rules:
+     - player: player_1
+       gains: A
+       template: bulletin_p1_gains_a
+     - player: player_1
+       gains: B
+       template: bulletin_p1_gains_b
   mediator_enabled: false
 
 trade_rules:

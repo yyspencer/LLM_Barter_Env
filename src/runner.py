@@ -576,18 +576,43 @@ def run_round(
                 if bfp and proposer_id not in bfp and responder_id not in bfp:
                     pass  # neither participant is in the filter — skip
                 else:
-                  proposer_name = player_map[proposer_id].display_name
-                  responder_name = player_map[responder_id].display_name
-                  give_str = format_goods_dict(proposed["give"])
-                  receive_str = format_goods_dict(proposed["receive"])
-                  bulletin = cfg.prompts.market_bulletin_template.format(
-                      proposer_name=proposer_name,
-                      give_str=give_str,
-                      receive_str=receive_str,
-                      responder_name=responder_name,
-                  )
-                  # Buffer it; visible to agents only at round end.
-                  pending_bulletins.append(bulletin)
+                    proposer_name = player_map[proposer_id].display_name
+                    responder_name = player_map[responder_id].display_name
+                    give_str = format_goods_dict(proposed["give"])
+                    receive_str = format_goods_dict(proposed["receive"])
+
+                    # Pick which template to use based on bulletin_rules.
+                    # A rule matches when its `player` is a participant
+                    # AND that player gains the good in `gains`. The
+                    # proposer gains everything in `receive`; the
+                    # responder gains everything in `give`. First matching
+                    # rule wins; fallback is market_bulletin_template.
+                    template_name = "market_bulletin_template"
+                    rules = cfg.experiment.mechanism.bulletin_rules or []
+                    for rule in rules:
+                        if rule.player == proposer_id and rule.gains in proposed["receive"]:
+                            template_name = rule.template
+                            break
+                        if rule.player == responder_id and rule.gains in proposed["give"]:
+                            template_name = rule.template
+                            break
+
+                    template = getattr(cfg.prompts, template_name, None)
+                    if template is None:
+                        logger.append_transcript(
+                            f"  [BULLETIN WARNING] template '{template_name}' "
+                            f"not found in prompts.yaml; using default.\n"
+                        )
+                        template = cfg.prompts.market_bulletin_template
+
+                    bulletin = template.format(
+                        proposer_name=proposer_name,
+                        give_str=give_str,
+                        receive_str=receive_str,
+                        responder_name=responder_name,
+                    )
+                    # Buffer it; visible to agents only at round end.
+                    pending_bulletins.append(bulletin)
  
         else:
             reason = pair_result.get("rejection_reason", "unknown")
