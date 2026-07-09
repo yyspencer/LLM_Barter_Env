@@ -93,21 +93,25 @@ PROBE_ROUNDS = [0, 2, 4, 6, 8, 10]
 GCOL         = {"A": "#1565C0", "B": "#B71C1C", "C": "#1B5E20"}
 CCOL         = ["#1565C0", "#FF6F00", "#1B5E20", "#6A1B9A"]   # one per condition
 
-# ─── Wave 2: runs_7-7 (market-framing conditions, multi-unit trades) ──────────
+# ─── Wave 2: runs_7-9 (market-framing conditions, multi-good trades) ──────────
 # Unlike the valence-test 2x2 design, this batch is a single control plus
 # three treatment wordings. The broadcast trigger also differs: control
-# broadcasts Builder (agents 1 & 2) gaining A/B with "fair"/"unfair" moral
-# language (same mechanic as the original "extremely" condition); the three
-# treatments broadcast ONLY Weaver (agents 3 & 4) gaining Good B, always in
-# B-favorable language, never moralizing, via three different rhetorical
-# framings (scarcity, bandwagon/social-proof, expert authority).
-BASE_DIR2 = Path("/home/qnguyen/Desktop/LLM_Barter_Env/runs/runs_7-7")
+# broadcasts Builder (agents 1 & 2) gaining A/B with "wonderful"/"awful"
+# moral language (same mechanic as the original valence-test conditions);
+# the three treatments broadcast ONLY Weaver (agents 3 & 4) gaining Good B,
+# always in B-favorable language, never moralizing, via three different
+# rhetorical framings (scarcity, bandwagon/social-proof, expert authority).
+# Agents can now propose trades that give/receive more than one good type in
+# a single offer (e.g. give A for B+C); all extraction helpers below already
+# iterate over the full give/receive dicts, so multi-good trades are handled
+# without special-casing.
+BASE_DIR2 = Path("/home/qnguyen/Desktop/LLM_Barter_Env/runs/runs_7-9")
 
 CONDITIONS2 = {
     "Control\n(no broadcast)": "control_runs",
-    "Scarcity\n(becoming harder to obtain)":     "condition_1",
-    "Bandwagon\n(several regard as useful)":    "condition_2",
-    "Expert\n(analyst recommends)":       "condition_3",
+    "Scarcity\n(\"becoming harder to obtain\")":  "condition_1",
+    "Bandwagon\n(\"several regard as useful\")":  "condition_2",
+    "Expert\n(\"analyst recommends\")":           "condition_3",
 }
 COND_LABELS2  = list(CONDITIONS2.keys())
 SHORT_LABELS2 = ["Control", "Scarcity", "Bandwagon", "Expert"]
@@ -804,7 +808,7 @@ for atype, cfg in AGENT_TYPES.items():
             print(f"    Proposals seeking {g}: {pct:.1f}%")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# MAIN LOOP — WAVE 2 (runs_7-7: control + scarcity/bandwagon/expert framings)
+# MAIN LOOP — WAVE 2 (runs_7-9: control + scarcity/bandwagon/expert framings)
 # ══════════════════════════════════════════════════════════════════════════════
 
 for atype, cfg in AGENT_TYPES.items():
@@ -815,7 +819,7 @@ for atype, cfg in AGENT_TYPES.items():
     bb     = cfg["baseline_bundle"]
 
     print(f"\n{'='*60}")
-    print(f"  {label}  [wave 2 / runs_7-7]")
+    print(f"  {label}  [wave 2 / runs_7-9]")
     print(f"{'='*60}")
 
     ratings_series2 = {lbl: agent_probe_series(ALL_RUNS2[lbl], ids, "ratings")
@@ -832,32 +836,32 @@ for atype, cfg in AGENT_TYPES.items():
     fig_probe(
         ratings_series2, br,
         ylabel   = "Stated valuation (1–10)",
-        suptitle = f"{label}: Probed Good Valuations Over Rounds — Wave 2 (runs_7-7)\n"
+        suptitle = f"{label}: Probed Good Valuations Over Rounds — Wave 2 (runs_7-9)\n"
                    f"(mean ± 95% CI across 10 runs; dotted = type baseline)",
         ylim     = (0, 11),
         yticks   = [0, 2, 4, 6, 8, 10],
-        save_path = OUT_DIR / f"fig1_ratings_{short}_0707.png",
+        save_path = OUT_DIR / f"fig1_ratings_{short}_0709.png",
     )
 
     # Fig 2 — desired bundle over rounds
     fig_probe(
         bundle_series2, bb,
         ylabel   = "Desired units (out of 6)",
-        suptitle = f"{label}: Desired Bundle Composition Over Rounds — Wave 2 (runs_7-7)\n"
+        suptitle = f"{label}: Desired Bundle Composition Over Rounds — Wave 2 (runs_7-9)\n"
                    f"(mean ± 95% CI across 10 runs; dotted = type baseline)",
         ylim     = (-0.3, 6.3),
         yticks   = [0, 1, 2, 3, 4, 5, 6],
-        save_path = OUT_DIR / f"fig2_bundle_{short}_0707.png",
+        save_path = OUT_DIR / f"fig2_bundle_{short}_0709.png",
     )
 
     # Fig 3 — cumulative net acquisition
-    fig_net(net_series2, f"{label} [Wave 2]", OUT_DIR / f"fig3_net_acquisition_{short}_0707.png")
+    fig_net(net_series2, f"{label} [Wave 2]", OUT_DIR / f"fig3_net_acquisition_{short}_0709.png")
 
     # Fig 4 — trade behaviour (control vs pooled treatment on panel E)
     fig_trade_behavior(
         acc_records2, proposals2, wtp_all2,
         agent_label   = f"{label} [Wave 2]",
-        save_path     = OUT_DIR / f"fig4_trade_behavior_{short}_0707.png",
+        save_path     = OUT_DIR / f"fig4_trade_behavior_{short}_0709.png",
         cond_labels   = COND_LABELS2,
         short_labels  = SHORT_LABELS2,
         ccol          = CCOL2,
@@ -871,7 +875,7 @@ for atype, cfg in AGENT_TYPES.items():
     # Fig 5 — condition comparison across all 4 wave-2 conditions
     fig_condition_compare(
         ratings_series2, br, f"{label} [Wave 2]",
-        OUT_DIR / f"fig5_condition_compare_{short}_0707.png",
+        OUT_DIR / f"fig5_condition_compare_{short}_0709.png",
         cond_labels = COND_LABELS2, colors = CCOL2,
         suptitle = f"{label}: Control vs Scarcity/Bandwagon/Expert Framing — Probed Ratings\n"
                    f"(mean ± 95% CI across 10 runs per condition)",
@@ -881,7 +885,7 @@ for atype, cfg in AGENT_TYPES.items():
 # NUMERIC SUMMARY — WAVE 2
 # ══════════════════════════════════════════════════════════════════════════════
 print(f"\n{'='*65}")
-print("NUMERIC SUMMARY — WAVE 2 (runs_7-7)")
+print("NUMERIC SUMMARY — WAVE 2 (runs_7-9)")
 print(f"{'='*65}")
 
 for atype, cfg in AGENT_TYPES.items():
