@@ -104,10 +104,10 @@ CCOL         = ["#1565C0", "#FF6F00", "#1B5E20", "#6A1B9A"]   # one per conditio
 BASE_DIR2 = Path("/home/qnguyen/Desktop/LLM_Barter_Env/runs/runs_7-7")
 
 CONDITIONS2 = {
-    "Control\n(Builder fair/unfair)": "control_runs",
-    "Scarcity\n(Weaver framing)":     "condition_1",
-    "Bandwagon\n(Weaver framing)":    "condition_2",
-    "Expert\n(Weaver framing)":       "condition_3",
+    "Control\n(no broadcast)": "control_runs",
+    "Scarcity\n(becoming harder to obtain)":     "condition_1",
+    "Bandwagon\n(several regard as useful)":    "condition_2",
+    "Expert\n(analyst recommends)":       "condition_3",
 }
 COND_LABELS2  = list(CONDITIONS2.keys())
 SHORT_LABELS2 = ["Control", "Scarcity", "Bandwagon", "Expert"]
