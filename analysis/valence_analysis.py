@@ -93,6 +93,28 @@ PROBE_ROUNDS = [0, 2, 4, 6, 8, 10]
 GCOL         = {"A": "#1565C0", "B": "#B71C1C", "C": "#1B5E20"}
 CCOL         = ["#1565C0", "#FF6F00", "#1B5E20", "#6A1B9A"]   # one per condition
 
+# ─── Wave 2: runs_7-7 (market-framing conditions, multi-unit trades) ──────────
+# Unlike the valence-test 2x2 design, this batch is a single control plus
+# three treatment wordings. The broadcast trigger also differs: control
+# broadcasts Builder (agents 1 & 2) gaining A/B with "fair"/"unfair" moral
+# language (same mechanic as the original "extremely" condition); the three
+# treatments broadcast ONLY Weaver (agents 3 & 4) gaining Good B, always in
+# B-favorable language, never moralizing, via three different rhetorical
+# framings (scarcity, bandwagon/social-proof, expert authority).
+BASE_DIR2 = Path("/home/qnguyen/Desktop/LLM_Barter_Env/runs/runs_7-7")
+
+CONDITIONS2 = {
+    "Control\n(Builder fair/unfair)": "control_runs",
+    "Scarcity\n(Weaver framing)":     "condition_1",
+    "Bandwagon\n(Weaver framing)":    "condition_2",
+    "Expert\n(Weaver framing)":       "condition_3",
+}
+COND_LABELS2  = list(CONDITIONS2.keys())
+SHORT_LABELS2 = ["Control", "Scarcity", "Bandwagon", "Expert"]
+CCOL2         = ["#455A64", "#EF6C00", "#6A1B9A", "#00838F"]   # one per condition
+CONTROL_LABEL2    = COND_LABELS2[0]
+TREATMENT_LABELS2 = COND_LABELS2[1:]
+
 # ══════════════════════════════════════════════════════════════════════════════
 # DATA LOADING
 # ══════════════════════════════════════════════════════════════════════════════
@@ -111,13 +133,17 @@ def load_run(run_dir: Path) -> dict:
     return run
 
 
-def load_condition(cond_dir_name: str) -> list[dict]:
-    d = BASE_DIR / cond_dir_name
+def load_condition(cond_dir_name: str, base_dir: Path = BASE_DIR) -> list[dict]:
+    d = base_dir / cond_dir_name
     return [load_run(sub) for sub in sorted(d.iterdir()) if sub.is_dir()]
 
 
 ALL_RUNS: dict[str, list[dict]] = {
     label: load_condition(cdir) for label, cdir in CONDITIONS.items()
+}
+
+ALL_RUNS2: dict[str, list[dict]] = {
+    label: load_condition(cdir, BASE_DIR2) for label, cdir in CONDITIONS2.items()
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -420,7 +446,21 @@ def fig_trade_behavior(acc_records_per_cond: dict,
                        proposals_per_cond: dict,
                        wtp_per_cond: dict,
                        agent_label: str,
-                       save_path: Path) -> None:
+                       save_path: Path,
+                       cond_labels: list | None = None,
+                       short_labels: list | None = None,
+                       ccol: list | None = None,
+                       panel_e_groups: list | None = None,
+                       panel_e_title: str = "E  Acceptance rate over rounds\n(pooled across wording conditions)") -> None:
+    cond_labels  = cond_labels  if cond_labels  is not None else COND_LABELS
+    short_labels = short_labels if short_labels is not None else SHORT_LABELS
+    ccol         = ccol         if ccol         is not None else CCOL
+    if panel_e_groups is None:
+        panel_e_groups = [
+            ("With broadcast", BC_LABELS,   "#B71C1C"),
+            ("No broadcast",   NOBC_LABELS, "#1565C0"),
+        ]
+
     fig = plt.figure(figsize=(15, 10))
     gs  = gridspec.GridSpec(2, 3, figure=fig, hspace=0.45, wspace=0.38)
     ax_acc  = fig.add_subplot(gs[0, :2])
@@ -430,7 +470,7 @@ def fig_trade_behavior(acc_records_per_cond: dict,
     ax_time = fig.add_subplot(gs[1, 2])
 
     # Panel A — acceptance probability
-    n_conds = len(COND_LABELS)
+    n_conds = len(cond_labels)
     bar_w   = 0.18
     offsets = np.linspace(-(len(GOODS) - 1) / 2 * bar_w,
                            (len(GOODS) - 1) / 2 * bar_w, len(GOODS))
@@ -438,7 +478,7 @@ def fig_trade_behavior(acc_records_per_cond: dict,
 
     for gi, g in enumerate(GOODS):
         ps, los, his = [], [], []
-        for lbl in COND_LABELS:
+        for lbl in cond_labels:
             p, lo, hi = acc_prob_ci(acc_records_per_cond[lbl], g)
             ps.append(p); los.append(lo); his.append(hi)
         x = x_base + offsets[gi]
@@ -450,10 +490,10 @@ def fig_trade_behavior(acc_records_per_cond: dict,
                         ecolor="black", elinewidth=1.2, capsize=3)
 
     ax_acc.set_xticks(x_base)
-    ax_acc.set_xticklabels(SHORT_LABELS)
+    ax_acc.set_xticklabels(short_labels)
     ax_acc.set_ylabel("P(accept)")
     ax_acc.set_ylim(0, 1.15)
-    ax_acc.set_title("A  Acceptance probability (merchant = responder)\nP(accept | acquiring good X)")
+    ax_acc.set_title("A  Acceptance probability (agent = responder)\nP(accept | acquiring good X)")
     ax_acc.legend(loc="upper right", fontsize=8)
     ax_acc.axhline(0.5, color="grey", lw=0.8, ls=":", alpha=0.6)
     ax_acc.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
@@ -461,7 +501,7 @@ def fig_trade_behavior(acc_records_per_cond: dict,
     # Panel B — sample sizes table
     ax_n.axis("off")
     rows = [["Condition"] + [f"N(acq {g})" for g in GOODS]]
-    for lbl, sh in zip(COND_LABELS, SHORT_LABELS):
+    for lbl, sh in zip(cond_labels, short_labels):
         row = [sh] + [str(sum(1 for r in acc_records_per_cond[lbl]
                               if r["good_acquired"] == g)) for g in GOODS]
         rows.append(row)
@@ -476,15 +516,15 @@ def fig_trade_behavior(acc_records_per_cond: dict,
     # Panel C — WTP
     bar_w2 = 0.2
     x2 = np.arange(len(GOODS))
-    for ci, lbl in enumerate(COND_LABELS):
+    for ci, lbl in enumerate(cond_labels):
         wtp = wtp_per_cond[lbl]
         means, errs = [], []
         for g in GOODS:
             m, se = mean_wtp(wtp, g)
             means.append(m); errs.append(se)
         off = (ci - (n_conds - 1) / 2) * bar_w2
-        ax_wtp.bar(x2 + off, means, width=bar_w2, color=CCOL[ci],
-                   label=SHORT_LABELS[ci], alpha=0.85)
+        ax_wtp.bar(x2 + off, means, width=bar_w2, color=ccol[ci],
+                   label=short_labels[ci], alpha=0.85)
         ax_wtp.errorbar(x2 + off, means, yerr=errs, fmt="none",
                         ecolor="black", elinewidth=1, capsize=2.5)
     ax_wtp.set_xticks(x2)
@@ -497,19 +537,19 @@ def fig_trade_behavior(acc_records_per_cond: dict,
     # Panel D — proposal targets
     bottoms = np.zeros(n_conds)
     for gi, g in enumerate(GOODS):
-        heights = [proposal_fracs(proposals_per_cond[lbl])[g] for lbl in COND_LABELS]
+        heights = [proposal_fracs(proposals_per_cond[lbl])[g] for lbl in cond_labels]
         ax_prop.bar(range(n_conds), heights, bottom=bottoms,
                     color=GCOL[g], label=f"Seek {g}", alpha=0.9)
         bottoms += np.array(heights)
     ax_prop.set_xticks(range(n_conds))
-    ax_prop.set_xticklabels(SHORT_LABELS)
+    ax_prop.set_xticklabels(short_labels)
     ax_prop.set_ylabel("Fraction of outgoing offers")
     ax_prop.set_ylim(0, 1.05)
     ax_prop.set_title("D  Goods sought in proposals\n(as proposer; fraction of offer-actions)")
     ax_prop.legend(loc="upper right", fontsize=8)
     ax_prop.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
 
-    # Panel E — acceptance rate over rounds (broadcast vs no-broadcast pooled)
+    # Panel E — acceptance rate over rounds (grouped, e.g. broadcast vs no-broadcast)
     def pooled_acc_rounds(labels):
         pooled: dict[int, list] = defaultdict(list)
         for lbl in labels:
@@ -523,10 +563,7 @@ def fig_trade_behavior(acc_records_per_cond: dict,
             result[r] = (p, p - 1.96 * se, p + 1.96 * se)
         return result
 
-    for label_str, labels, color in [
-        ("With broadcast", BC_LABELS,   "#B71C1C"),
-        ("No broadcast",   NOBC_LABELS, "#1565C0"),
-    ]:
+    for label_str, labels, color in panel_e_groups:
         series = pooled_acc_rounds(labels)
         if not series:
             continue
@@ -541,7 +578,7 @@ def fig_trade_behavior(acc_records_per_cond: dict,
     ax_time.set_ylabel("P(accept)")
     ax_time.set_ylim(0, 1.1)
     ax_time.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
-    ax_time.set_title("E  Acceptance rate over rounds\n(pooled across wording conditions)")
+    ax_time.set_title(panel_e_title)
     ax_time.legend(fontsize=8)
     ax_time.axhline(0.5, color="grey", lw=0.8, ls=":", alpha=0.5)
 
@@ -620,6 +657,39 @@ def fig_wording_compare(ext_series: dict, wa_series: dict,
         "(mean ± 95% CI across 10 runs per wording)",
         fontsize=11, fontweight="bold",
     )
+    fig.tight_layout()
+    fig.savefig(save_path, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved: {save_path.name}")
+
+
+def fig_condition_compare(series_per_cond: dict, baselines: dict[str, float],
+                          agent_label: str, save_path: Path,
+                          cond_labels: list, colors: list, suptitle: str) -> None:
+    """N-way per-good comparison (one line per condition), 3 panels (A/B/C)."""
+    fig, axes = plt.subplots(1, 3, figsize=(14, 5), sharey=True)
+    for gi, g in enumerate(GOODS):
+        ax = axes[gi]
+        for lbl, color in zip(cond_labels, colors):
+            series = series_per_cond[lbl]
+            rounds, mn_vals, lo_vals, hi_vals = [], [], [], []
+            for r in sorted(series):
+                m, lo, hi = mean_ci(series[r][:, gi])
+                rounds.append(r); mn_vals.append(m); lo_vals.append(lo); hi_vals.append(hi)
+            ax.plot(rounds, mn_vals, color=color, lw=2.5, marker="o", ms=5,
+                    label=lbl.replace("\n", " "))
+            ax.fill_between(rounds, lo_vals, hi_vals, color=color, alpha=0.12)
+        ax.axhline(baselines[g], color=GCOL[g], lw=1, ls=":", alpha=0.65,
+                   label=f"Baseline ({int(baselines[g])})")
+        ax.set_title(f"Good {g}", fontweight="bold", color=GCOL[g], fontsize=12)
+        ax.set_xlabel("Round")
+        ax.set_xticks(PROBE_ROUNDS)
+        ax.set_xlim(-0.5, 10.5)
+        if gi == 0:
+            ax.set_ylabel("Stated valuation (1–10)")
+    axes[1].legend(loc="lower center", fontsize=8, ncol=2,
+                   bbox_to_anchor=(0.5, -0.42))
+    fig.suptitle(suptitle, fontsize=11, fontweight="bold")
     fig.tight_layout()
     fig.savefig(save_path, bbox_inches="tight")
     plt.close(fig)
@@ -712,6 +782,118 @@ for atype, cfg in AGENT_TYPES.items():
     for lbl in COND_LABELS:
         short_c = lbl.replace("\n", " ")
         runs    = ALL_RUNS[lbl]
+        series  = agent_probe_series(runs, ids, "ratings")
+        recs    = acceptance_data(runs, ids)
+        tgts    = proposal_targets(runs, ids)
+        total   = sum(tgts.values()) or 1
+        print(f"\n  {short_c}  ({len(runs)} runs)")
+        for r_lbl, r_idx in [("pre-run r=0", 0), ("round-10 r=10", 10)]:
+            if r_idx in series:
+                mn = np.nanmean(series[r_idx], axis=0)
+                drift = [mn[i] - br[g] for i, g in enumerate(GOODS)]
+                print(f"    Ratings @ {r_lbl}: "
+                      + "  ".join(f"{g}={mn[i]:.2f}(Δ{drift[i]:+.2f})"
+                                  for i, g in enumerate(GOODS)))
+        for g in GOODS:
+            p, lo, hi = acc_prob_ci(recs, g)
+            n = sum(1 for r in recs if r["good_acquired"] == g)
+            if not np.isnan(p):
+                print(f"    P(accept|acq {g}): {p:.1%}  CI[{lo:.1%}–{hi:.1%}]  N={n}")
+        for g in GOODS:
+            pct = tgts.get(g, 0) / total * 100
+            print(f"    Proposals seeking {g}: {pct:.1f}%")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN LOOP — WAVE 2 (runs_7-7: control + scarcity/bandwagon/expert framings)
+# ══════════════════════════════════════════════════════════════════════════════
+
+for atype, cfg in AGENT_TYPES.items():
+    ids    = cfg["ids"]
+    label  = cfg["label"]
+    short  = cfg["short"]
+    br     = cfg["baseline_ratings"]
+    bb     = cfg["baseline_bundle"]
+
+    print(f"\n{'='*60}")
+    print(f"  {label}  [wave 2 / runs_7-7]")
+    print(f"{'='*60}")
+
+    ratings_series2 = {lbl: agent_probe_series(ALL_RUNS2[lbl], ids, "ratings")
+                       for lbl in COND_LABELS2}
+    bundle_series2  = {lbl: agent_probe_series(ALL_RUNS2[lbl], ids, "desired_bundle")
+                       for lbl in COND_LABELS2}
+    net_series2     = {lbl: net_acquisition_series(ALL_RUNS2[lbl], ids)
+                       for lbl in COND_LABELS2}
+    acc_records2    = {lbl: acceptance_data(ALL_RUNS2[lbl], ids) for lbl in COND_LABELS2}
+    proposals2      = {lbl: proposal_targets(ALL_RUNS2[lbl], ids) for lbl in COND_LABELS2}
+    wtp_all2        = {lbl: wtp_data(ALL_RUNS2[lbl], ids)         for lbl in COND_LABELS2}
+
+    # Fig 1 — ratings over rounds
+    fig_probe(
+        ratings_series2, br,
+        ylabel   = "Stated valuation (1–10)",
+        suptitle = f"{label}: Probed Good Valuations Over Rounds — Wave 2 (runs_7-7)\n"
+                   f"(mean ± 95% CI across 10 runs; dotted = type baseline)",
+        ylim     = (0, 11),
+        yticks   = [0, 2, 4, 6, 8, 10],
+        save_path = OUT_DIR / f"fig1_ratings_{short}_0707.png",
+    )
+
+    # Fig 2 — desired bundle over rounds
+    fig_probe(
+        bundle_series2, bb,
+        ylabel   = "Desired units (out of 6)",
+        suptitle = f"{label}: Desired Bundle Composition Over Rounds — Wave 2 (runs_7-7)\n"
+                   f"(mean ± 95% CI across 10 runs; dotted = type baseline)",
+        ylim     = (-0.3, 6.3),
+        yticks   = [0, 1, 2, 3, 4, 5, 6],
+        save_path = OUT_DIR / f"fig2_bundle_{short}_0707.png",
+    )
+
+    # Fig 3 — cumulative net acquisition
+    fig_net(net_series2, f"{label} [Wave 2]", OUT_DIR / f"fig3_net_acquisition_{short}_0707.png")
+
+    # Fig 4 — trade behaviour (control vs pooled treatment on panel E)
+    fig_trade_behavior(
+        acc_records2, proposals2, wtp_all2,
+        agent_label   = f"{label} [Wave 2]",
+        save_path     = OUT_DIR / f"fig4_trade_behavior_{short}_0707.png",
+        cond_labels   = COND_LABELS2,
+        short_labels  = SHORT_LABELS2,
+        ccol          = CCOL2,
+        panel_e_groups = [
+            ("Control",             [CONTROL_LABEL2],    "#455A64"),
+            ("Treatment (pooled)",  TREATMENT_LABELS2,    "#B71C1C"),
+        ],
+        panel_e_title = "E  Acceptance rate over rounds\n(control vs pooled B-favorable framings)",
+    )
+
+    # Fig 5 — condition comparison across all 4 wave-2 conditions
+    fig_condition_compare(
+        ratings_series2, br, f"{label} [Wave 2]",
+        OUT_DIR / f"fig5_condition_compare_{short}_0707.png",
+        cond_labels = COND_LABELS2, colors = CCOL2,
+        suptitle = f"{label}: Control vs Scarcity/Bandwagon/Expert Framing — Probed Ratings\n"
+                   f"(mean ± 95% CI across 10 runs per condition)",
+    )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NUMERIC SUMMARY — WAVE 2
+# ══════════════════════════════════════════════════════════════════════════════
+print(f"\n{'='*65}")
+print("NUMERIC SUMMARY — WAVE 2 (runs_7-7)")
+print(f"{'='*65}")
+
+for atype, cfg in AGENT_TYPES.items():
+    ids   = cfg["ids"]
+    label = cfg["label"]
+    br    = cfg["baseline_ratings"]
+    print(f"\n{'─'*65}")
+    print(f"{label}")
+    print(f"{'─'*65}")
+    for lbl in COND_LABELS2:
+        short_c = lbl.replace("\n", " ")
+        runs    = ALL_RUNS2[lbl]
         series  = agent_probe_series(runs, ids, "ratings")
         recs    = acceptance_data(runs, ids)
         tgts    = proposal_targets(runs, ids)
