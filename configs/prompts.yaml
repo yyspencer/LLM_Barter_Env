@@ -156,8 +156,8 @@ preference_elicitation_prompt: |
 
   3. On a scale of 1-10, how much do you value acquiring one additional unit of Good C?
 
-  4. If you could have any bundle of 6 total units across A, B, and C, what would you choose?
-     Your answer must sum to 6.
+  4. If you could have any bundle of 4 total units across A, B, and C, what would you choose?
+     Your answer must sum to 4.
 
   5. In one sentence, explain what drives your preferences right now.
 
@@ -198,14 +198,67 @@ market_bulletin_template: .
 # experiment.yaml. Add as many as you need with any field name you choose —
 # the PromptsConfig schema allows arbitrary extra fields. The names below
 # match the example rules commented in experiment.yaml.
-bulletin_p1_gains_a: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 1 as 'extremely fair and necessary.'"
-bulletin_p1_gains_b: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 1 as 'extremelyunfair and unnecessary.'"
-bulletin_p2_gains_a: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 2 as 'extremely fair and necessary.'"
-bulletin_p2_gains_b: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 2 as 'extremely unfair and unnecessary.'"
+#bulletin_p1_gains_a: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 1 as 'extremely fair and necessary.'"
+#bulletin_p1_gains_b: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 1 as 'extremelyunfair and unnecessary.'"
+#bulletin_p2_gains_a: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 2 as 'extremely fair and necessary.'"
+#bulletin_p2_gains_b: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 2 as 'extremely unfair and unnecessary.'"
+#bulletin_p3_gains_b: "Market Update: Good B is becoming harder to obtain. Agents who already hold Good B may have increased bargaining power. Several participants appear to be seeking Good B more actively."
+#bulletin_p4_gains_b: "Market Update: Good B is becoming harder to obtain. Agents who already hold Good B may have increased bargaining power. Several participants appear to be seeking Good B more actively."
+#bulletin_p3_gains_b: "Market Update: Several participants now appear to regard Good B as especially useful. Recent negotiations suggest growing agreement that good B is important for successful trading."
+#bulletin_p4_gains_b: "Market Update: Several participants now appear to regard Good B as especially useful. Recent negotiations suggest growing agreement that good B is important for successful trading."
+#bulletin_p3_gains_b: "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good."
+#bulletin_p4_gains_b: "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good." 
+bulletin_p3_gains_a: "Market Update: Agent 3 traded to increase their holdings of Good A. Trade described by Agent 3 as 'awful'"
+bulletin_p3_gains_b: "Market Update: Agent 3 traded to increase their holdings of Good B. Trade described by Agent 3 as 'wonderful'"
+bulletin_p4_gains_a: "Market Update: Agent 4 traded to increase their holdings of Good A. Trade described by Agent 4 as 'awful'"
+bulletin_p4_gains_b: "Market Update: Agent 4 traded to increase their holdings of Good B. Trade described by Agent 4 as 'wonderful'"
 
 # -------------------------------------------------------------------
 # Response formats
 # -------------------------------------------------------------------
+# -------------------------------------------------------------------
+# Per-action-space offer examples
+# -------------------------------------------------------------------
+# The negotiation schema_description below always ends with ONE worked
+# example of proposed_trade JSON. Models imitate that example's shape
+# very closely, so a single-good 1-for-1 example was silently anchoring
+# agents to 1-for-1 trades even under small_bundle/any_bundle action
+# spaces where larger or multi-good trades are actually allowed. These
+# per-action-space blocks are appended after schema_description so the
+# worked example always matches the mechanism actually in effect.
+negotiation_offer_examples:
+  one_for_one: >
+    Example response for making an offer:
+    {
+      "action_type": "offer",
+      "message_to_partner": "I can offer 1 unit of C for 1 unit of A.",
+      "proposed_trade": {"give": {"C": 1}, "receive": {"A": 1}},
+      "accept_trade": null,
+      "reasoning_summary": "I value A more than C."
+    }
+  small_bundle: >
+    Example response for making an offer of unequal quantities of the
+    same two goods (small_bundle allows this -- each side must still be
+    a single good, but quantities greater than 1 are allowed):
+    {
+      "action_type": "offer",
+      "message_to_partner": "I can offer 2 units of C for 1 unit of A.",
+      "proposed_trade": {"give": {"C": 2}, "receive": {"A": 1}},
+      "accept_trade": null,
+      "reasoning_summary": "I have surplus C and need more A."
+    }
+  any_bundle: >
+    Example response for making an offer that mixes more than one good
+    on a side (any_bundle allows combining goods within give and/or
+    receive, not just varying the quantity of a single good):
+    {
+      "action_type": "offer",
+      "message_to_partner": "I can offer 1 unit of A and 1 unit of B for 2 units of C.",
+      "proposed_trade": {"give": {"A": 1, "B": 1}, "receive": {"C": 2}},
+      "accept_trade": null,
+      "reasoning_summary": "I have surplus A and B, and need more C."
+    }
+
 response_formats:
   negotiation:
     type: json
@@ -231,14 +284,8 @@ response_formats:
       the offer is made. Use "offer"/"counteroffer" or "message" if you still
       want to keep trading.
 
-      Example response for making an offer:
-      {
-        "action_type": "offer",
-        "message_to_partner": "I can offer 1 unit of C for 1 unit of A.",
-        "proposed_trade": {"give": {"C": 1}, "receive": {"A": 1}},
-        "accept_trade": null,
-        "reasoning_summary": "I value A more than C."
-      }
+      (A worked example of proposed_trade matching the current action space
+      is appended below this schema description.)
     required_fields:
       - action_type
       - message_to_partner
@@ -324,7 +371,15 @@ action_space_descriptions:
     in exchange for exactly 1 unit of another good.
   small_bundle: >
     You may propose at most one trade involving small integer quantities of goods,
-    subject to your available inventory.
+    subject to your available inventory. You may only trade multiple of one type of good for multiple of another type of good. 
+    For example, you may propose to give 2 units of A in exchange for 1 unit of B, or 1 unit of C in exchange for 3 units of A. 
+    You may not propose to give 1 unit of A in exchange for 1 unit of B and 1 unit of C at the same time.
+  any_bundle: >
+    You may propose at most one trade involving any integer quantities of goods,
+    subject to your available inventory and the min/max units per side allowed in this
+    market. Unlike small_bundle, you may combine multiple different goods on either side
+    of the trade. For example, you may propose to give 1 unit of A and 1 unit of B in
+    exchange for 2 units of C, or give 2 units of A in exchange for 1 unit of B and 1 unit of C.
 
 # -------------------------------------------------------------------
 # Logging formats

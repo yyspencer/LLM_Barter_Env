@@ -414,7 +414,9 @@ def render_preference_elicitation_prompt(prompts) -> str:
     return prompts.preference_elicitation_prompt.strip()
 
 
-def render_response_format_instruction(prompts, format_name: str) -> str:
+def render_response_format_instruction(
+    prompts, format_name: str, action_space: Optional[str] = None
+) -> str:
     """
     Render the schema description for one response type.
 
@@ -422,6 +424,15 @@ def render_response_format_instruction(prompts, format_name: str) -> str:
     - negotiation
     - commitment
     - preference_probe
+
+    For format_name == "negotiation", the worked proposed_trade example
+    depends heavily on action_space: models imitate the shape of whatever
+    example they are shown (e.g. how many goods appear per side, whether
+    quantities differ from 1) far more reliably than they generalize from
+    the prose rule alone. If action_space is provided and a matching entry
+    exists in prompts.negotiation_offer_examples, that example is appended
+    after the base schema description so the two always stay consistent
+    with whatever mechanism.action_space is actually configured.
     """
     if format_name not in prompts.response_formats:
         raise KeyError(
@@ -430,7 +441,14 @@ def render_response_format_instruction(prompts, format_name: str) -> str:
         )
 
     spec = prompts.response_formats[format_name]
-    return spec.schema_description.strip()
+    text = spec.schema_description.strip()
+
+    if format_name == "negotiation" and action_space is not None:
+        examples = getattr(prompts, "negotiation_offer_examples", None)
+        if examples and action_space in examples:
+            text = text + "\n\n" + examples[action_space].strip()
+
+    return text
 
 
 # -------------------------------------------------------------------
@@ -484,7 +502,7 @@ def build_negotiation_first_messages(
             partner_name=partner_name,
             action_space=action_space,
         ),
-        render_response_format_instruction(prompts, "negotiation"),
+        render_response_format_instruction(prompts, "negotiation", action_space=action_space),
     ]
 
     return [
@@ -534,7 +552,7 @@ def build_negotiation_response_messages(
             partner_message=partner_message,
             action_space=action_space,
         ),
-        render_response_format_instruction(prompts, "negotiation"),
+        render_response_format_instruction(prompts, "negotiation", action_space=action_space),
     ]
 
     return [

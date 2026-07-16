@@ -43,7 +43,7 @@ mechanism:
   synchronization: end_of_round
 
   negotiation_turns_per_agent: 5
-  action_space: one_for_one
+  action_space: any_bundle
   allow_no_trade: true
   require_mutual_acceptance: true
   enforce_inventory_constraints: true
@@ -53,7 +53,7 @@ mechanism:
   broadcast_completed_trades: false
   # Only broadcast trades involving these players. Null = broadcast all trades.
   # Example: [player_1, player_5] = only trades where agent 1 or 5 participates.
-  broadcast_filter_players: [player_1,player_2]
+  broadcast_filter_players: [player_3,player_4]
   # Optional: pick a different bulletin template depending on who's trading
   # and what they're gaining. Each rule has:
   #   player:   the agent ID to check
@@ -66,18 +66,18 @@ mechanism:
   #bulletin_rules: null
   # Example:
   bulletin_rules:
-     - player: player_1
-       gains: A
-       template: bulletin_p1_gains_a
-     - player: player_1
+     - player: player_3
        gains: B
-       template: bulletin_p1_gains_b
-     - player: player_2
-       gains: A
-       template: bulletin_p2_gains_a
-     - player: player_2
+       template: bulletin_p3_gains_b
+     - player: player_4
        gains: B
-       template: bulletin_p2_gains_b
+       template: bulletin_p4_gains_b 
+     - player: player_3
+       gains: A
+       template: bulletin_p3_gains_a
+     - player: player_4
+       gains: A
+       template: bulletin_p4_gains_a    
   mediator_enabled: false
 
 trade_rules:
@@ -86,7 +86,7 @@ trade_rules:
   enforce_inventory_constraints: true
   integer_goods_only: true
   min_units_per_side: 1
-  max_units_per_side: 1
+  max_units_per_side: 3
 
   # For v1, conflicts should not happen because players appear in only one pair
   # per round. This is here for future scalability.

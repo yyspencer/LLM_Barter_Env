@@ -90,7 +90,9 @@ def validate_trade(
             if not isinstance(qty, int) or qty < 0:
                 return False, f"{side_name}.{good} must be a nonneg int, got {qty}"
  
-    if cfg.experiment.mechanism.action_space == "one_for_one":
+    action_space = cfg.experiment.mechanism.action_space
+
+    if action_space == "one_for_one":
         give_total    = sum(give.values())
         receive_total = sum(receive.values())
         if give_total != 1 or receive_total != 1:
@@ -101,7 +103,22 @@ def validate_trade(
             )
         if len(give) != 1 or len(receive) != 1:
             return False, "one_for_one requires exactly one good on each side"
- 
+
+    elif action_space == "small_bundle":
+        # Any (bounded) quantity is fine, but each side must consist of a
+        # single good type -- no mixing goods within a side.
+        if len(give) != 1 or len(receive) != 1:
+            return (
+                False,
+                "small_bundle requires exactly one good type on each side "
+                f"(got give={list(give.keys())}, receive={list(receive.keys())})",
+            )
+
+    elif action_space == "any_bundle":
+        # No shape restriction beyond the generic checks below (multiple
+        # goods per side are allowed).
+        pass
+
     give_total    = sum(give.values())
     receive_total = sum(receive.values())
     if give_total < rules.min_units_per_side or receive_total < rules.min_units_per_side:
@@ -1074,6 +1091,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             client=client,
             logger=logger,
             pair_id=pair_id,
+            action_space=exp_cfg.mechanism.action_space,
             board_history=bulletin_board if broadcast else None,
             broadcast=broadcast,
         )

@@ -250,6 +250,7 @@ def gpt_negotiation_action(
     client: OpenAI,
     logger: RunLogger,
     pair_id: str,
+    action_space: str = "one_for_one",
     trade_history: Optional[List[Mapping[str, Any]]] = None,
     board_history: Optional[List[Mapping[str, Any]]] = None,
     broadcast: bool = False,
@@ -259,8 +260,11 @@ def gpt_negotiation_action(
  
     On turn 0, uses the first-message prompt.
     On subsequent turns, uses the response prompt with the partner's last message.
+
+    action_space must be passed in by the caller (sourced from
+    cfg.experiment.mechanism.action_space) so the prompt text always matches
+    the mechanism actually enforced in validate_trade.
     """
-    action_space = "one_for_one"  # from experiment config
  
     # Build messages
     if turn_index == 0 or not negotiation_history:
