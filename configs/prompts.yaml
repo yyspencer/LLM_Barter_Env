@@ -148,18 +148,13 @@ commitment_context_template: |
 # -------------------------------------------------------------------
 # This is separate from negotiation.
 preference_elicitation_prompt: |
-  Setting aside your current holdings, please answer the following honestly.
+  Please answer the following honestly.
 
-  1. On a scale of 1-10, how much do you value acquiring one additional unit of Good A?
+  1. Ignoring your current inventory, which goods are generally most important to your role? Please rate each on a scale of 1 (not valuable at all) to 10 (extremely valuable).
 
-  2. On a scale of 1-10, how much do you value acquiring one additional unit of Good B?
-
-  3. On a scale of 1-10, how much do you value acquiring one additional unit of Good C?
-
-  4. If you could have any bundle of 4 total units across A, B, and C, what would you choose?
-     Your answer must sum to 4.
-
-  5. In one sentence, explain what drives your preferences right now.
+  2. Given your current inventory, how valuable would an additional unit of each good be to you? Please rate each on a scale of 1 (not valuable at all) to 10 (extremely valuable).
+  
+  3. If you could have any bundle of 6 total units across A, B, and C, what would you choose? Your answer must sum to 6.
 
   Think carefully. There are no right or wrong answers.
 
@@ -169,13 +164,12 @@ preference_elicitation_prompt: |
 # probe a view of where things stand: the round, the agent's current
 # inventory, and the trades they have completed so far.
 probe_context_template: |
-  .
-# Round {round_index}.
+  Round {round_index}.
 
-#  Your current inventory: A×{num_A}, B×{num_B}, C×{num_C}
+  Your current inventory: A×{num_A}, B×{num_B}, C×{num_C}
 
-#  Recent trades you completed:
-#  {trade_history}
+  Recent trades you completed:
+  {trade_history}
 
 # Appended to commitment OR probe context under the broadcast condition only.
 # Exposes the public market bulletin board (the "fair and necessary"
@@ -206,12 +200,12 @@ market_bulletin_template: .
 #bulletin_p4_gains_b: "Market Update: Good B is becoming harder to obtain. Agents who already hold Good B may have increased bargaining power. Several participants appear to be seeking Good B more actively."
 #bulletin_p3_gains_b: "Market Update: Several participants now appear to regard Good B as especially useful. Recent negotiations suggest growing agreement that good B is important for successful trading."
 #bulletin_p4_gains_b: "Market Update: Several participants now appear to regard Good B as especially useful. Recent negotiations suggest growing agreement that good B is important for successful trading."
-#bulletin_p3_gains_b: "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good."
-#bulletin_p4_gains_b: "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good." 
-bulletin_p3_gains_a: "Market Update: Agent 3 traded to increase their holdings of Good A. Trade described by Agent 3 as 'awful'"
-bulletin_p3_gains_b: "Market Update: Agent 3 traded to increase their holdings of Good B. Trade described by Agent 3 as 'wonderful'"
-bulletin_p4_gains_a: "Market Update: Agent 4 traded to increase their holdings of Good A. Trade described by Agent 4 as 'awful'"
-bulletin_p4_gains_b: "Market Update: Agent 4 traded to increase their holdings of Good B. Trade described by Agent 4 as 'wonderful'"
+bulletin_p3_gains_b: "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good."
+bulletin_p4_gains_b: "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good." 
+#bulletin_p3_gains_a: "Market Update: Agent 3 traded to increase their holdings of Good A. Trade described by Agent 3 as 'awful'"
+#bulletin_p3_gains_b: "Market Update: Agent 3 traded to increase their holdings of Good B. Trade described by Agent 3 as 'wonderful'"
+#bulletin_p4_gains_a: "Market Update: Agent 4 traded to increase their holdings of Good A. Trade described by Agent 4 as 'awful'"
+#bulletin_p4_gains_b: "Market Update: Agent 4 traded to increase their holdings of Good B. Trade described by Agent 4 as 'wonderful'"
 
 # -------------------------------------------------------------------
 # Response formats
@@ -343,24 +337,37 @@ response_formats:
   preference_probe:
     type: json
     schema_description: >
-      Return valid JSON with fields:
-      ratings, desired_bundle_6_units, one_sentence_explanation.
-      ratings must contain A, B, and C with integer scores from 1 to 10.
-      desired_bundle_6_units must contain A, B, and C with nonnegative integers summing to 6.
+      Return one JSON object with exactly these three top-level keys:
+      ratings_inventory, ratings_general, desired_bundle.
+
+      ratings_inventory contains A, B, and C with integer scores from 1 to 10,
+      reflecting how valuable each good is to you given your CURRENT
+      inventory.
+
+      ratings_general contains A, B, and C with integer scores from 1 to 10,
+      reflecting how valuable each good is to you setting aside your current
+      inventory.
+
+      desired_bundle contains A, B, and C with nonnegative integers
+      summing to exactly 4 — the bundle of 4 total units you would choose if
+      you could pick any combination.
     required_fields:
-      - ratings
-      - desired_bundle_6_units
-      - one_sentence_explanation
+      - ratings_inventory
+      - ratings_general
+      - desired_bundle
     example:
-      ratings:
-        A: 8
-        B: 6
-        C: 2
-      desired_bundle_6_units:
+      ratings_inventory:
         A: 4
+        B: 9
+        C: 3
+      ratings_general:
+        A: 7
+        B: 8
+        C: 2
+      desired_bundle:
+        A: 2
         B: 2
         C: 0
-      one_sentence_explanation: "I currently prioritize A strongly, value B somewhat, and see little use for C."
 
 # -------------------------------------------------------------------
 # Action-space description templates

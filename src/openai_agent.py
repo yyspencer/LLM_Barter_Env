@@ -120,6 +120,7 @@ def _call_openai(
     temperature: float,
     max_completion_tokens: int,
     timeout: float,
+    response_format={"type": "json_object"},
 ) -> str:
     """
     Call the OpenAI chat completions endpoint with retry on transient errors.
@@ -137,6 +138,7 @@ def _call_openai(
                 temperature=temperature,
                 max_completion_tokens=max_completion_tokens,
                 timeout=timeout,
+                response_format=response_format,
             )
             return response.choices[0].message.content or ""
  
@@ -204,33 +206,40 @@ def _validate_commitment_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
  
  
 def _validate_probe_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
-    """Ensure ratings and desired_bundle_6_units are present and well-formed."""
-    required = {"ratings", "desired_bundle_6_units"}
+    """Ensure the three current probe fields are present and well-formed.
+
+    Current probe (see prompts.yaml preference_elicitation_prompt):
+      Q1: ratings_inventory      — value of each good given current inventory
+      Q2: ratings_general     — value of each good setting inventory aside
+      Q3: desired_bundle — preferred bundle summing to 4
+    """
+    required = {"ratings_inventory", "ratings_general", "desired_bundle"}
     missing = required - set(parsed.keys())
     if missing:
         raise ValueError(f"Preference probe response missing fields: {missing}")
- 
-    # Coerce rating values to int in 1–10
-    for good, val in parsed["ratings"].items():
-        try:
-            parsed["ratings"][good] = max(1, min(10, int(val)))
-        except (TypeError, ValueError):
-            parsed["ratings"][good] = 5
- 
-    # Ensure bundle sums to 6 (clamp if not)
-    bundle = parsed["desired_bundle_6_units"]
+
+    # Both ratings blocks: coerce to int, clamp to [1, 10]
+    for field in ("ratings_inventory", "ratings_general"):
+        for good, val in parsed[field].items():
+            try:
+                parsed[field][good] = max(1, min(10, int(val)))
+            except (TypeError, ValueError):
+                parsed[field][good] = 5
+                print(f"  [openai_agent] Warning: {field}[{good}] was not an int, defaulting to 5.")
+
+    # Desired bundle must sum to 4; scale + fix rounding drift if not
+    bundle = parsed["desired_bundle"]
     total = sum(bundle.values())
-    if total != 6 and total > 0:
-        # Scale proportionally and re-round
+    if total != 4 and total > 0:
+        print(f"  [openai_agent] Warning: desired_bundle sums to {total}, scaling to sum=4.")
         goods = sorted(bundle.keys())
-        scaled = {g: round(bundle[g] / total * 6) for g in goods}
-        diff = 6 - sum(scaled.values())
+        scaled = {g: round(bundle[g] / total * 4) for g in goods}
+        diff = 4 - sum(scaled.values())
         if diff != 0:
             top = max(goods, key=lambda g: bundle[g])
             scaled[top] = max(0, scaled[top] + diff)
-        parsed["desired_bundle_6_units"] = scaled
- 
-    parsed.setdefault("one_sentence_explanation", "")
+        parsed["desired_bundle"] = scaled
+
     return parsed
  
  
@@ -480,13 +489,18 @@ def gpt_preference_probe(
         parsed = parse_json_response(raw)
         parsed = _validate_probe_response(parsed)
     except (ValueError, KeyError) as exc:
-        print(f"  [openai_agent] Parse error for {player.id} probe: {exc}")
-        # Return a neutral fallback so the run doesn't crash
-        parsed = {
-            "ratings": {g: 5 for g in ["A", "B", "C"]},
-            "desired_bundle_6_units": {g: 2 for g in ["A", "B", "C"]},
-            "one_sentence_explanation": f"Parse error: {exc}",
-        }
+        print(f"  [openai_agent] Parse error for {player.id} probe — skipping this probe. {exc}")
+        logger.log_model_output(
+            player_id=player.id,
+            output_type="preference_probe",
+            raw_output=raw,
+            parsed_output=None,
+            round_index=round_index,
+            pair_id=None,
+            provider="openai",
+            model=model_spec.model,
+        )
+        return None
  
     logger.log_model_output(
         player_id=player.id,
@@ -574,8 +588,9 @@ def gpt_preference_probe_contextual(
         print(f"  [openai_agent] Parse error for {player.id} contextual probe: {exc}")
         parsed = {
             "ratings": {g: 5 for g in ["A", "B", "C"]},
-            "desired_bundle_6_units": {g: 2 for g in ["A", "B", "C"]},
-            "one_sentence_explanation": f"Parse error: {exc}",
+            "ratings_reasoning": {g: "" for g in ["A", "B", "C"]},
+            "desired_bundle_4_units": {"A": 2, "B": 1, "C": 1},
+            "role_important_goods": f"Parse error: {exc}",
         }
 
     logger.log_model_output(

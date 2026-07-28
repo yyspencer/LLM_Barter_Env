@@ -223,6 +223,12 @@ def run_preference_probes(
             bulletin_board=bulletin_board,
             broadcast=broadcast,
         )
+
+        if response is None:
+            logger.append_transcript(
+                f"[PROBE {label}] {player.display_name}: SKIPPED (parse error)\n"
+            )
+            continue
  
         probe_record = {
             "round_index": round_index,
@@ -233,15 +239,11 @@ def run_preference_probes(
             "response": response,
         }
         logger.log_preference_probe(probe_record)
-        # Q5 ("explain what drives your preferences right now") goes into the
-        # transcript alongside the structured ratings/desired bundle so the
-        # transcript alone is a usable summary of probe drift.
-        explanation = (response.get("one_sentence_explanation") or "").strip()
         logger.append_transcript(
-            f"[PROBE {label}] {player.display_name}: "
-            f"ratings={response['ratings']}, "
-            f"desired={response['desired_bundle_6_units']}, "
-            f"explanation=\"{explanation}\"\n"
+        f"[PROBE {label}] {player.display_name}:\n"
+        f"    ratings_inventory={response['ratings_inventory']}\n"
+        f"    ratings_general={response['ratings_general']}\n"
+        f"    desired_bundle={response['desired_bundle']}\n"
         )
  
  
@@ -1475,12 +1477,14 @@ def run_probe_only_experiment(
                 "with_context": with_context,
             }
             logger.log_preference_probe(probe_record)
-            explanation = (parsed.get("one_sentence_explanation") or "").strip()
+            reasoning = parsed.get("ratings_reasoning") or {}
+            role_goods = (parsed.get("role_important_goods") or "").strip()
             logger.append_transcript(
-                f"[PROBE probe_{i}] {player.display_name}: "
-                f"ratings={parsed['ratings']}, "
-                f"desired={parsed['desired_bundle_6_units']}, "
-                f"explanation=\"{explanation}\"\n"
+                f"[PROBE probe_{i}] {player.display_name}:\n"
+                f"    ratings={parsed['ratings']}\n"
+                f"    ratings_reasoning={reasoning}\n"
+                f"    desired_bundle_of_4={parsed['desired_bundle_4_units']}\n"
+                f"    role_important_goods=\"{role_goods}\"\n"
             )
 
     summary = {
