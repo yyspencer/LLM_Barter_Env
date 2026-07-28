@@ -273,8 +273,9 @@ def mock_preference_probe(
     )
  
     return {
-        "ratings": ratings,
-        "desired_bundle_6_units": alloc,
+        "ratings_inventory": dict(ratings),
+        "ratings_general": dict(ratings),
+        "desired_bundle": alloc,
         "one_sentence_explanation": explanation,
     }
  

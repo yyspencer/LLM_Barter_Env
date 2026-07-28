@@ -15,7 +15,7 @@ This module does not call any LLM APIs and does not mutate game state.
 from __future__ import annotations
 
 import json
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, List, Mapping, Optional
 
 
 Inventory = Mapping[str, int]
@@ -47,15 +47,8 @@ def format_inventory_for_prompt(
     style: str = "compact",
 ) -> str:
     """
-    Format inventory for prompt injection.
-
-    compact:
-        A×1, B×0, C×3
-
-    lines:
-        A: 1
-        B: 0
-        C: 3
+    Format inventory for prompt injection, iterating goods in the order given.
+    The caller is responsible for passing goods in the run's display order.
     """
     goods_list = list(goods)
 
@@ -66,7 +59,6 @@ def format_inventory_for_prompt(
         return "\n".join(f"- {g}: {inventory.get(g, 0)}" for g in goods_list)
 
     raise ValueError(f"Unknown inventory format style: {style}")
-
 
 def format_trade_history(
     trade_history: Optional[TradeHistory],
@@ -193,19 +185,37 @@ def format_json_block(obj: Any) -> str:
 # Prompt renderers
 # -------------------------------------------------------------------
 
-def render_system_prompt(prompts) -> str:
-    """Render the shared system prompt."""
-    return prompts.system_prompt.strip()
+def render_system_prompt(prompts, display_order: List[str]) -> str:
+    """
+    Render the shared system prompt.
+
+    The goods list ("There are 3 types of goods: ...") is rendered in
+    display_order so the very first mention of A/B/C in the whole prompt
+    doesn't anchor on a fixed order.
+    """
+    g1, g2, g3 = display_order
+    return safe_format(prompts.system_prompt, good_1=g1, good_2=g2, good_3=g3).strip()
 
 
-def render_persona_prompt(player, prompts) -> str:
+def render_persona_prompt(player, prompts, display_order: List[str]) -> str:
     """
     Render persona prompt from persona_template and player fields.
+
+    preference_description (from players.yaml) is itself formatted with
+    good_1/good_2/good_3 first. Builder/Weaver descriptions don't use these
+    placeholders (their goods mentions are tied to that character's actual
+    weight ranking, not display order) so formatting is a no-op for them.
+    The Merchant description has no weight-based ranking to justify a fixed
+    order, so it uses {good_1}/{good_2}/{good_3} to avoid anchoring.
     """
+    g1, g2, g3 = display_order
+    description = safe_format(
+        player.preference_description, good_1=g1, good_2=g2, good_3=g3
+    )
     return safe_format(
         prompts.persona_template,
         display_name=player.display_name,
-        preference_description=player.preference_description,
+        preference_description=description,
         role=getattr(player, "role", None) or "",
         player_id=player.id,
     ).strip()
@@ -217,6 +227,7 @@ def render_world_state_prompt(
     goods: Iterable[str],
     round_index: int,
     partner_name: str,
+    display_order: List[str],
     trade_history: Optional[TradeHistory] = None,
     negotiation_history: Optional[NegotiationHistory] = None,
     board_history: Optional[TradeHistory] = None,
@@ -228,8 +239,10 @@ def render_world_state_prompt(
     Uses:
     - world_state_control_template when broadcast=False
     - world_state_broadcast_template when broadcast=True
+
+    display_order: run-wide goods order (e.g. ['C', 'A', 'B']). Used for the
+    inventory display so we don't leak an A-first anchor.
     """
-    goods_list = list(goods)
     inventory = player.inventory
 
     template = (
@@ -238,22 +251,21 @@ def render_world_state_prompt(
         else prompts.world_state_control_template
     )
 
+    # Build the ordered inventory line once, then feed it into the template.
+    inventory_line = format_inventory_for_prompt(
+        inventory, display_order, style="compact"
+    )
+
     values = {
         "round_index": round_index,
         "display_name": player.display_name,
         "player_id": player.id,
         "partner_name": partner_name,
-        "inventory": format_inventory_for_prompt(inventory, goods_list, style="lines"),
-        "inventory_compact": format_inventory_for_prompt(inventory, goods_list, style="compact"),
+        "inventory_line": inventory_line,
         "trade_history": format_trade_history(trade_history),
         "negotiation_history": format_negotiation_history(negotiation_history),
         "board_history": format_board_history(board_history),
     }
-
-    # Also expose num_A, num_B, num_C, etc. for templates like:
-    # A×{num_A}, B×{num_B}, C×{num_C}
-    for good in goods_list:
-        values[f"num_{good}"] = inventory.get(good, 0)
 
     return safe_format(template, **values).strip()
 
@@ -308,26 +320,22 @@ def render_commitment_prompt(
     prompts,
     goods: Iterable[str],
     proposed_trade: Mapping[str, Any],
+    display_order: List[str],
 ) -> str:
     """
     Render the commitment prompt for accepting/rejecting a proposed trade.
 
-    proposed_trade is from the *proposer's* perspective:
-        give    = what the proposer (partner) gives   = what YOU receive
-        receive = what the proposer (partner) receives = what YOU give
-
-    We flip the perspective here so the prompt addresses the responder
-    (the player making the commitment decision) directly, avoiding any
-    ambiguity about which side of the trade they are on.
+    proposed_trade is from the *proposer's* perspective (see original doc).
+    display_order controls only the current-inventory line; trade descriptions
+    stay in the order the trade was actually proposed in (retrospective).
     """
-    inventory_text = format_inventory_for_prompt(player.inventory, goods, style="lines")
+    inventory_text = format_inventory_for_prompt(
+        player.inventory, display_order, style="lines"
+    )
 
     partner_gives = proposed_trade.get("give", {}) or {}
     partner_receives = proposed_trade.get("receive", {}) or {}
 
-    # From the responder's point of view:
-    #   they_give = what the partner hands over = partner's "give"
-    #   you_give  = what you must hand over    = partner's "receive"
     they_give_text = format_goods_dict(partner_gives)
     you_give_text  = format_goods_dict(partner_receives)
 
@@ -368,22 +376,20 @@ def render_probe_context(
     prompts,
     goods: Iterable[str],
     round_index: int,
+    display_order: List[str],
     trade_history: Optional[TradeHistory],
 ) -> str:
     """
-    Render the context block prepended to the preference probe: round number,
-    the player's current inventory, and the trades they have completed so far.
-    The probe asks about preferences abstractly, but it does so in the
-    *situated* moment — the agent has just lived through these trades. This is
-    what allows preference drift to be measurable.
+    Render the context block prepended to the preference probe.
+    Inventory line uses display_order to avoid A-first anchoring.
     """
-    inv = dict(player.inventory)
+    inventory_line = format_inventory_for_prompt(
+        player.inventory, display_order, style="compact"
+    )
     return safe_format(
         prompts.probe_context_template,
         round_index=round_index,
-        num_A=inv.get("A", 0),
-        num_B=inv.get("B", 0),
-        num_C=inv.get("C", 0),
+        inventory_line=inventory_line,
         trade_history=format_trade_history(trade_history),
     ).strip()
 
@@ -404,35 +410,32 @@ def render_bulletin_board_section(
     ).strip()
 
 
-def render_preference_elicitation_prompt(prompts) -> str:
+def render_preference_elicitation_prompt(prompts, display_order: List[str]) -> str:
     """
     Render the preference elicitation probe.
 
-    This is intentionally separated from current holdings / negotiation context
-    because the probe asks the agent to set aside current holdings.
+    The probe question is templated so that the three goods appear in the
+    run's display order. This keeps the *question text* itself consistent
+    with the JSON schema ordering, so nothing leaks an A-first bias.
     """
-    return prompts.preference_elicitation_prompt.strip()
+    g1, g2, g3 = display_order
+    return safe_format(
+        prompts.preference_elicitation_prompt,
+        good_1=g1, good_2=g2, good_3=g3,
+    ).strip()
 
 
 def render_response_format_instruction(
-    prompts, format_name: str, action_space: Optional[str] = None
+    prompts,
+    format_name: str,
+    action_space: Optional[str] = None,
+    display_order: Optional[List[str]] = None,
 ) -> str:
     """
     Render the schema description for one response type.
 
-    format_name examples:
-    - negotiation
-    - commitment
-    - preference_probe
-
-    For format_name == "negotiation", the worked proposed_trade example
-    depends heavily on action_space: models imitate the shape of whatever
-    example they are shown (e.g. how many goods appear per side, whether
-    quantities differ from 1) far more reliably than they generalize from
-    the prose rule alone. If action_space is provided and a matching entry
-    exists in prompts.negotiation_offer_examples, that example is appended
-    after the base schema description so the two always stay consistent
-    with whatever mechanism.action_space is actually configured.
+    For 'preference_probe', if display_order is given, the schema description
+    and example are re-rendered in that order to prevent A-first bias.
     """
     if format_name not in prompts.response_formats:
         raise KeyError(
@@ -448,7 +451,46 @@ def render_response_format_instruction(
         if examples and action_space in examples:
             text = text + "\n\n" + examples[action_space].strip()
 
+    if format_name == "preference_probe" and display_order is not None:
+        text = _render_probe_schema_text(display_order)
+
     return text
+
+
+def _render_probe_schema_text(display_order: List[str]) -> str:
+    """
+    Build the probe schema description + example with goods in display_order.
+    Kept here (not in prompts.yaml) so the ordering logic and the text stay
+    together — if you edit the schema description, edit it here.
+    """
+    g1, g2, g3 = display_order
+    # Example values keyed by good, then re-emitted in display order.
+    current_vals  = {"A": 4, "B": 9, "C": 3}
+    abstract_vals = {"A": 7, "B": 8, "C": 2}
+    bundle_vals   = {"A": 3, "B": 2, "C": 1}
+
+    def _fmt_dict(vals):
+        return "{" + ", ".join(f'"{g}": {vals[g]}' for g in display_order) + "}"
+
+    return (
+        f"Return one JSON object with exactly these three top-level keys:\n"
+        f"ratings_inventory, ratings_general, desired_bundle.\n\n"
+        f"ratings_inventory contains {g1}, {g2}, and {g3} with integer scores "
+        f"from 1 to 10, reflecting how valuable each good is to you given "
+        f"your CURRENT inventory.\n\n"
+        f"ratings_general contains {g1}, {g2}, and {g3} with integer scores "
+        f"from 1 to 10, reflecting how valuable each good is to you setting "
+        f"aside your current inventory.\n\n"
+        f"desired_bundle contains {g1}, {g2}, and {g3} with "
+        f"nonnegative integers summing to exactly 6 — the bundle of 6 total "
+        f"units you would choose if you could pick any combination.\n\n"
+        f"Example:\n"
+        f"{{\n"
+        f'  "ratings_inventory": {_fmt_dict(current_vals)},\n'
+        f'  "ratings_general": {_fmt_dict(abstract_vals)},\n'
+        f'  "desired_bundle": {_fmt_dict(bundle_vals)}\n'
+        f"}}"
+    )
 
 
 # -------------------------------------------------------------------
@@ -462,6 +504,7 @@ def build_negotiation_first_messages(
     round_index: int,
     partner_name: str,
     action_space: str,
+    display_order: List[str],
     trade_history: Optional[TradeHistory] = None,
     negotiation_history: Optional[NegotiationHistory] = None,
     board_history: Optional[TradeHistory] = None,
@@ -480,8 +523,8 @@ def build_negotiation_first_messages(
     """
     system = "\n\n".join(
         [
-            render_system_prompt(prompts),
-            render_persona_prompt(player, prompts),
+            render_system_prompt(prompts, display_order),
+            render_persona_prompt(player, prompts, display_order),
         ]
     )
 
@@ -492,6 +535,7 @@ def build_negotiation_first_messages(
             goods=goods,
             round_index=round_index,
             partner_name=partner_name,
+            display_order=display_order,
             trade_history=trade_history,
             negotiation_history=negotiation_history,
             board_history=board_history,
@@ -519,6 +563,7 @@ def build_negotiation_response_messages(
     partner_name: str,
     partner_message: str,
     action_space: str,
+    display_order: List[str],
     trade_history: Optional[TradeHistory] = None,
     negotiation_history: Optional[NegotiationHistory] = None,
     board_history: Optional[TradeHistory] = None,
@@ -529,8 +574,8 @@ def build_negotiation_response_messages(
     """
     system = "\n\n".join(
         [
-            render_system_prompt(prompts),
-            render_persona_prompt(player, prompts),
+            render_system_prompt(prompts, display_order),
+            render_persona_prompt(player, prompts, display_order),
         ]
     )
 
@@ -541,6 +586,7 @@ def build_negotiation_response_messages(
             goods=goods,
             round_index=round_index,
             partner_name=partner_name,
+            display_order=display_order,
             trade_history=trade_history,
             negotiation_history=negotiation_history,
             board_history=board_history,
@@ -566,6 +612,7 @@ def build_commitment_messages(
     prompts,
     goods: Iterable[str],
     proposed_trade: Mapping[str, Any],
+    display_order: List[str],
     round_index: int = 0,
     partner_name: str = "your partner",
     negotiation_history: Optional[NegotiationHistory] = None,
@@ -582,8 +629,8 @@ def build_commitment_messages(
     """
     system = "\n\n".join(
         [
-            render_system_prompt(prompts),
-            render_persona_prompt(player, prompts),
+            render_system_prompt(prompts, display_order),
+            render_persona_prompt(player, prompts, display_order),
         ]
     )
 
@@ -603,6 +650,7 @@ def build_commitment_messages(
             prompts=prompts,
             goods=goods,
             proposed_trade=proposed_trade,
+            display_order=display_order,
         )
     )
     user_parts.append(render_response_format_instruction(prompts, "commitment"))
@@ -616,6 +664,7 @@ def build_commitment_messages(
 def build_preference_probe_messages(
     player,
     prompts,
+    display_order: List[str],
     goods: Iterable[str] = ("A", "B", "C"),
     round_index: int = 0,
     trade_history: Optional[TradeHistory] = None,
@@ -625,16 +674,15 @@ def build_preference_probe_messages(
     """
     Build chat messages for preference elicitation.
 
-    The probe now includes the situated context — round, current inventory,
-    own trade history, and (under broadcast) the public market bulletin board
-    — before the elicitation questions. Without this, the probe is run in a
-    vacuum and the experimental treatment (the "fair and necessary" bulletin)
-    is invisible to it, which makes preference drift unmeasurable.
+    display_order controls the ordering of every A/B/C mention in the probe:
+    the inventory line in the context, the question wording, the schema
+    description, and the example JSON. Together these prevent the model from
+    anchoring on an A-first order.
     """
     system = "\n\n".join(
         [
-            render_system_prompt(prompts),
-            render_persona_prompt(player, prompts),
+            render_system_prompt(prompts, display_order),
+            render_persona_prompt(player, prompts, display_order),
         ]
     )
 
@@ -644,13 +692,18 @@ def build_preference_probe_messages(
             prompts=prompts,
             goods=goods,
             round_index=round_index,
+            display_order=display_order,
             trade_history=trade_history,
         ),
     ]
     if broadcast:
         user_parts.append(render_bulletin_board_section(prompts, board_history))
-    user_parts.append(render_preference_elicitation_prompt(prompts))
-    user_parts.append(render_response_format_instruction(prompts, "preference_probe"))
+    user_parts.append(render_preference_elicitation_prompt(prompts, display_order))
+    user_parts.append(
+        render_response_format_instruction(
+            prompts, "preference_probe", display_order=display_order
+        )
+    )
 
     return [
         {"role": "system", "content": system},

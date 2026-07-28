@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
  
 from config import load_config, print_config_summary
+from display_order import order_for_run
 from pairing import (
     format_schedule,
     full_cycle_length,
@@ -288,9 +289,15 @@ Modes:
             if args.num_runs > 1:
                 cfg.experiment.experiment.seed = base_seed + i
                 cfg.experiment.experiment.name = f"{base_name}_run_{i + 1}"
-                bar = "=" * 60
-                print(f"\n{bar}\n=== Run {i + 1} of {args.num_runs} "
-                      f"(seed={cfg.experiment.experiment.seed}) ===\n{bar}")
+
+            # Assign the counterbalancing run index. This is 1-indexed so
+            # run_index=1 maps to ORDER_PATTERN[0] = ['A', 'B', 'C'].
+            cfg.experiment.experiment.run_index = i + 1
+
+            bar = "=" * 60
+            print(f"\n{bar}\n=== Run {cfg.experiment.experiment.run_index} of "
+                  f"{args.num_runs} (seed={cfg.experiment.experiment.seed}, "
+                  f"display_order={order_for_run(cfg.experiment.experiment.run_index)}) ===\n{bar}")
 
             if args.mock_run:
                 cmd_mock_run(cfg)
@@ -304,6 +311,7 @@ Modes:
     finally:
         cfg.experiment.experiment.seed = base_seed
         cfg.experiment.experiment.name = base_name
+        cfg.experiment.experiment.run_index = 1
  
  
 if __name__ == "__main__":

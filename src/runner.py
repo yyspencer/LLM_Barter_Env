@@ -26,6 +26,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
  
 from config import LoadedConfig
+from display_order import order_for_run
 from logger import RunLogger, build_pair_id
 from mock_agent import (
     mock_commitment_decision,
@@ -37,6 +38,7 @@ from prompt_render import format_goods_dict
 from utility import (
     apply_trade_to_inventory,
     player_starting_utility_summary,
+    predicted_marginal_utilities,
     shifted_cobb_douglas,
 )
  
@@ -188,6 +190,7 @@ def run_preference_probes(
     logger: RunLogger,
     cfg: LoadedConfig,
     probe_fn: ProbeFn,
+    display_order: Optional[List[str]] = None,
     label_override: Optional[str] = None,
     trade_history: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     bulletin_board: Optional[List[str]] = None,
@@ -219,6 +222,7 @@ def run_preference_probes(
         response = probe_fn(
             player=player,
             round_index=round_index,
+            display_order=display_order,
             trade_history=(trade_history or {}).get(player.id),
             bulletin_board=bulletin_board,
             broadcast=broadcast,
@@ -229,18 +233,30 @@ def run_preference_probes(
                 f"[PROBE {label}] {player.display_name}: SKIPPED (parse error)\n"
             )
             continue
- 
+
+        current_inventory = dict(inventories[player.id])
+        predicted_marginal_utility = predicted_marginal_utilities(
+            inventory=current_inventory,
+            weights=player.utility_weights,
+            goods=cfg.experiment.market.goods,
+            shift=cfg.experiment.utility.terminal_utility.shift,
+        )
+
         probe_record = {
             "round_index": round_index,
             "probe_label": label,
             "player_id": player.id,
             "display_name": player.display_name,
-            "current_inventory": dict(inventories[player.id]),
+            "current_inventory": current_inventory,
+            "predicted_marginal_utility": predicted_marginal_utility,
+            "display_order": list(display_order) if display_order else None,
             "response": response,
         }
         logger.log_preference_probe(probe_record)
         logger.append_transcript(
         f"[PROBE {label}] {player.display_name}:\n"
+        f"    current_inventory={current_inventory}\n"
+        f"    predicted_marginal_utility={predicted_marginal_utility}\n"
         f"    ratings_inventory={response['ratings_inventory']}\n"
         f"    ratings_general={response['ratings_general']}\n"
         f"    desired_bundle={response['desired_bundle']}\n"
@@ -261,6 +277,7 @@ def run_pair_negotiation(
     logger: RunLogger,
     negotiation_fn: NegotiationFn,
     commitment_fn: CommitmentFn,
+    display_order: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Run one pair's negotiation using the provided agent callables.
@@ -299,6 +316,7 @@ def run_pair_negotiation(
             turn_index=turn,
             round_index=round_index,
             pair_id=pair_id,
+            display_order=display_order,
         )
  
         msg_record = {
@@ -386,6 +404,7 @@ def run_pair_negotiation(
                 pair_id=pair_id,
                 partner_name=current.display_name,
                 negotiation_history=negotiation_history,
+                display_order=display_order,
             )
             decision = commitment["decision"]
             reasoning = commitment.get("reasoning_summary", "")
@@ -469,6 +488,7 @@ def run_round(
     negotiation_fn: NegotiationFn,
     commitment_fn: CommitmentFn,
     bulletin_board: Optional[List[str]] = None,
+    display_order: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Run one experiment round for all pairs. Returns trade result records.
 
@@ -523,6 +543,7 @@ def run_round(
             logger=logger,
             negotiation_fn=negotiation_fn,
             commitment_fn=commitment_fn,
+            display_order=display_order,
         )
  
         if pair_result["trade_accepted"]:
@@ -746,7 +767,18 @@ def _run_experiment_loop(
     player_map: Dict[str, Any]           = {p.id: p for p in players}
     inventories: Dict[str, Inventory]    = {p.id: dict(p.inventory) for p in players}
     trade_history: Dict[str, List[Dict]] = {}
- 
+
+    # Run-wide counterbalancing of goods display order (see display_order.py).
+    run_index = exp_cfg.experiment.run_index
+    display_order = order_for_run(run_index)
+    logger.log_event("display_order_assigned", {
+        "run_index": run_index,
+        "display_order": display_order,
+    })
+    logger.append_transcript(
+        f"\n[DISPLAY ORDER for this run: {', '.join(display_order)}]\n"
+    )
+
     # Starting state
     starting_utilities = []
     logger.append_transcript("STARTING INVENTORIES AND UTILITIES\n" + "=" * 60 + "\n")
@@ -770,6 +802,7 @@ def _run_experiment_loop(
             logger=logger,
             cfg=cfg,
             probe_fn=probe_fn,
+            display_order=display_order,
             trade_history=trade_history,
             bulletin_board=bulletin_board if bulletin_board is not None else None,
             broadcast=cfg.experiment.mechanism.broadcast_completed_trades,
@@ -801,6 +834,7 @@ def _run_experiment_loop(
             negotiation_fn=negotiation_fn,
             commitment_fn=commitment_fn,
             bulletin_board=bulletin_board,
+            display_order=display_order,
         )
         all_trade_records.extend(round_trades)
  
@@ -822,11 +856,12 @@ def _run_experiment_loop(
                 logger=logger,
                 cfg=cfg,
                 probe_fn=probe_fn,
+                display_order=display_order,
                 trade_history=trade_history,
                 bulletin_board=bulletin_board if bulletin_board is not None else None,
                 broadcast=cfg.experiment.mechanism.broadcast_completed_trades,
             )
- 
+
         n_stop = exp_cfg.stopping.stop_if_no_trades_for_n_rounds
         if n_stop is not None:
             recent = all_trade_records[-(n_stop * max(len(pr.pairs), 1)):]
@@ -851,6 +886,7 @@ def _run_experiment_loop(
             logger=logger,
             cfg=cfg,
             probe_fn=probe_fn,
+            display_order=display_order,
             trade_history=trade_history,
             bulletin_board=bulletin_board if bulletin_board is not None else None,
             broadcast=cfg.experiment.mechanism.broadcast_completed_trades,
@@ -877,6 +913,8 @@ def _run_experiment_loop(
         "num_players": exp_cfg.market.num_players,
         "goods": goods,
         "seed": exp_cfg.experiment.seed,
+        "run_index": run_index,
+        "display_order": display_order,
         "total_trades_accepted": total_accepted,
         "total_trades_rejected": total_rejected,
         "starting_utilities": starting_utilities,
@@ -948,7 +986,7 @@ def run_mock_experiment(cfg: LoadedConfig) -> RunLogger:
     bulletin_board: Optional[List[str]] = [] if broadcast else None
 
     def negotiation_fn(player, partner, negotiation_history, turn_index,
-                       round_index, pair_id, _inv=starting_inventories):
+                       round_index, pair_id, _inv=starting_inventories, **_ignored):
         # Use the live inventories snapshot passed via the loop's closure
         return mock_negotiation_action(
             player_id=player.id,
@@ -1078,7 +1116,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
     bulletin_board: Optional[List[str]] = [] if broadcast else None
  
     def negotiation_fn(player, partner, negotiation_history, turn_index,
-                       round_index, pair_id):
+                       round_index, pair_id, display_order=None):
         # Patch player.inventory so prompt_render sees the live state
         player.inventory = live_inv[player.id]
         return gpt_negotiation_action(
@@ -1093,13 +1131,15 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             client=client,
             logger=logger,
             pair_id=pair_id,
+            display_order=display_order,
             action_space=exp_cfg.mechanism.action_space,
             board_history=bulletin_board if broadcast else None,
             broadcast=broadcast,
         )
- 
+
     def commitment_fn(player, proposed_trade, round_index, pair_id,
-                      partner_name="your partner", negotiation_history=None):
+                      partner_name="your partner", negotiation_history=None,
+                      display_order=None):
         player.inventory = live_inv[player.id]
         return gpt_commitment_decision(
             player=player,
@@ -1111,6 +1151,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             logger=logger,
             round_index=round_index,
             pair_id=pair_id,
+            display_order=display_order,
             partner_name=partner_name,
             negotiation_history=negotiation_history,
             board_history=bulletin_board if broadcast else None,
@@ -1118,7 +1159,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
         )
  
     def probe_fn(player, round_index, trade_history=None,
-                 bulletin_board=None, broadcast=False):
+                 bulletin_board=None, broadcast=False, display_order=None):
         # Patch live inventory so the probe context shows the up-to-date state.
         player.inventory = live_inv[player.id]
         return gpt_preference_probe(
@@ -1128,6 +1169,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             client=client,
             logger=logger,
             round_index=round_index,
+            display_order=display_order,
             goods=goods,
             trade_history=trade_history,
             board_history=bulletin_board,
@@ -1223,7 +1265,7 @@ def run_random_experiment(cfg: LoadedConfig) -> RunLogger:
     }
 
     def negotiation_fn(player, partner, negotiation_history, turn_index,
-                       round_index, pair_id):
+                       round_index, pair_id, **_ignored):
         """First turn: propose a uniformly random feasible 1-for-1 trade.
         Subsequent turns: end the negotiation (single-shot per pair)."""
         if turn_index > 0:
@@ -1400,6 +1442,12 @@ def run_probe_only_experiment(
     players = cfg.players.players
     inventories: Dict[str, Inventory] = {p.id: dict(p.inventory) for p in players}
 
+    display_order = order_for_run(exp_cfg.experiment.run_index)
+    logger.log_event("display_order_assigned", {
+        "run_index": exp_cfg.experiment.run_index,
+        "display_order": display_order,
+    })
+
     logger.append_transcript(
         "STARTING INVENTORIES (no trading in probe-only mode)\n"
         + "=" * 60 + "\n"
@@ -1439,7 +1487,7 @@ def run_probe_only_experiment(
         for player in players:
             if with_context:
                 # Build the user message so we can append it to history.
-                base_msgs    = build_preference_probe_messages(player, prompts)
+                base_msgs    = build_preference_probe_messages(player, prompts, display_order)
                 user_msg     = base_msgs[1]
 
                 parsed, raw  = gpt_preference_probe_contextual(
@@ -1450,6 +1498,7 @@ def run_probe_only_experiment(
                     logger=logger,
                     round_index=i,
                     prior_history=player_histories[player.id],
+                    display_order=display_order,
                 )
                 # Append this Q&A turn so the next iteration sees it.
                 player_histories[player.id].extend([
@@ -1464,27 +1513,37 @@ def run_probe_only_experiment(
                     client=client,
                     logger=logger,
                     round_index=i,
+                    display_order=display_order,
                 )
 
             # Log and write to transcript (same path for both modes).
+            current_inventory = dict(inventories[player.id])
+            predicted_marginal_utility = predicted_marginal_utilities(
+                inventory=current_inventory,
+                weights=player.utility_weights,
+                goods=exp_cfg.market.goods,
+                shift=exp_cfg.utility.terminal_utility.shift,
+            )
+
             probe_record = {
                 "round_index": i,
                 "probe_label": f"probe_{i}",
                 "player_id": player.id,
                 "display_name": player.display_name,
-                "current_inventory": dict(inventories[player.id]),
+                "current_inventory": current_inventory,
+                "predicted_marginal_utility": predicted_marginal_utility,
+                "display_order": list(display_order),
                 "response": parsed,
                 "with_context": with_context,
             }
             logger.log_preference_probe(probe_record)
-            reasoning = parsed.get("ratings_reasoning") or {}
-            role_goods = (parsed.get("role_important_goods") or "").strip()
             logger.append_transcript(
                 f"[PROBE probe_{i}] {player.display_name}:\n"
-                f"    ratings={parsed['ratings']}\n"
-                f"    ratings_reasoning={reasoning}\n"
-                f"    desired_bundle_of_4={parsed['desired_bundle_4_units']}\n"
-                f"    role_important_goods=\"{role_goods}\"\n"
+                f"    current_inventory={current_inventory}\n"
+                f"    predicted_marginal_utility={predicted_marginal_utility}\n"
+                f"    ratings_inventory={parsed['ratings_inventory']}\n"
+                f"    ratings_general={parsed['ratings_general']}\n"
+                f"    desired_bundle={parsed['desired_bundle']}\n"
             )
 
     summary = {

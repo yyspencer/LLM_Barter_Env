@@ -207,6 +207,36 @@ def log_utility_delta(
     return after - before
 
 
+def predicted_marginal_utilities(
+    inventory: Inventory,
+    weights: Weights,
+    goods: Optional[Iterable[str]] = None,
+    shift: float = 1.0,
+) -> Dict[str, float]:
+    """
+    Predicted marginal utility of one additional unit of each good, read off
+    the latent Cobb-Douglas utility function:
+
+        delta_U_g = U(..., x_g + 1, ...) - U(..., x_g, ...)
+
+    This is the objective counterpart to a preference probe's elicited
+    valuation for that good. Comparing the two per good, per probe, is what
+    lets later analysis tell rational inventory-driven revaluation apart
+    from valuation shifts the inventory alone doesn't explain.
+    """
+    selected_goods = list(goods) if goods is not None else list(weights.keys())
+    base = shifted_cobb_douglas(inventory, weights, shift=shift, goods=selected_goods)
+
+    deltas: Dict[str, float] = {}
+    for good in selected_goods:
+        bumped_inventory = dict(inventory)
+        bumped_inventory[good] = bumped_inventory.get(good, 0) + 1
+        after = shifted_cobb_douglas(bumped_inventory, weights, shift=shift, goods=selected_goods)
+        deltas[good] = after - base
+
+    return deltas
+
+
 def apply_trade_to_inventory(
     inventory: Inventory,
     give: Mapping[str, int],

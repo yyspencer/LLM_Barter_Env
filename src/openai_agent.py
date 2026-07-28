@@ -211,7 +211,7 @@ def _validate_probe_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
     Current probe (see prompts.yaml preference_elicitation_prompt):
       Q1: ratings_inventory      — value of each good given current inventory
       Q2: ratings_general     — value of each good setting inventory aside
-      Q3: desired_bundle — preferred bundle summing to 4
+      Q3: desired_bundle — preferred bundle summing to 6
     """
     required = {"ratings_inventory", "ratings_general", "desired_bundle"}
     missing = required - set(parsed.keys())
@@ -227,14 +227,14 @@ def _validate_probe_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
                 parsed[field][good] = 5
                 print(f"  [openai_agent] Warning: {field}[{good}] was not an int, defaulting to 5.")
 
-    # Desired bundle must sum to 4; scale + fix rounding drift if not
+    # Desired bundle must sum to 6; scale + fix rounding drift if not
     bundle = parsed["desired_bundle"]
     total = sum(bundle.values())
-    if total != 4 and total > 0:
-        print(f"  [openai_agent] Warning: desired_bundle sums to {total}, scaling to sum=4.")
+    if total != 6 and total > 0:
+        print(f"  [openai_agent] Warning: desired_bundle sums to {total}, scaling to sum=6.")
         goods = sorted(bundle.keys())
-        scaled = {g: round(bundle[g] / total * 4) for g in goods}
-        diff = 4 - sum(scaled.values())
+        scaled = {g: round(bundle[g] / total * 6) for g in goods}
+        diff = 6 - sum(scaled.values())
         if diff != 0:
             top = max(goods, key=lambda g: bundle[g])
             scaled[top] = max(0, scaled[top] + diff)
@@ -259,6 +259,7 @@ def gpt_negotiation_action(
     client: OpenAI,
     logger: RunLogger,
     pair_id: str,
+    display_order: List[str],
     action_space: str = "one_for_one",
     trade_history: Optional[List[Mapping[str, Any]]] = None,
     board_history: Optional[List[Mapping[str, Any]]] = None,
@@ -284,6 +285,7 @@ def gpt_negotiation_action(
             round_index=round_index,
             partner_name=partner.display_name,
             action_space=action_space,
+            display_order=display_order,
             trade_history=trade_history,
             negotiation_history=negotiation_history,
             board_history=board_history,
@@ -305,6 +307,7 @@ def gpt_negotiation_action(
             partner_name=partner.display_name,
             partner_message=last_partner_msg,
             action_space=action_space,
+            display_order=display_order,
             trade_history=trade_history,
             negotiation_history=negotiation_history,
             board_history=board_history,
@@ -367,6 +370,7 @@ def gpt_commitment_decision(
     logger: RunLogger,
     round_index: int,
     pair_id: str,
+    display_order: List[str],
     partner_name: str = "your partner",
     negotiation_history: Optional[List[Dict[str, Any]]] = None,
     board_history: Optional[List[str]] = None,
@@ -383,6 +387,7 @@ def gpt_commitment_decision(
         prompts=prompts,
         goods=goods,
         proposed_trade=proposed_trade,
+        display_order=display_order,
         round_index=round_index,
         partner_name=partner_name,
         negotiation_history=negotiation_history,
@@ -444,29 +449,28 @@ def gpt_preference_probe(
     client: OpenAI,
     logger: RunLogger,
     round_index: int,
+    display_order: List[str],
     goods: Iterable[str] = ("A", "B", "C"),
     trade_history: Optional[List[Dict[str, Any]]] = None,
     board_history: Optional[List[str]] = None,
     broadcast: bool = False,
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """Call GPT for a preference elicitation probe.
 
-    The probe now runs in the situated context the agent has just lived
-    through: round, current inventory, own trade history, and (under
-    broadcast) the public market bulletin board. Without this, the probe was
-    run in a vacuum and the broadcast condition's social framing was
-    invisible to it, making drift unmeasurable.
+    display_order: run-wide goods order used for the question text, the
+    inventory display, the schema, and the example.
     """
     messages = build_preference_probe_messages(
         player=player,
         prompts=prompts,
+        display_order=display_order,
         goods=goods,
         round_index=round_index,
         trade_history=trade_history,
         board_history=board_history,
         broadcast=broadcast,
     )
- 
+
     logger.log_prompt(
         player_id=player.id,
         prompt_type="preference_probe",
@@ -474,7 +478,7 @@ def gpt_preference_probe(
         round_index=round_index,
         pair_id=None,
     )
- 
+
     gen = model_spec.generation
     raw = _call_openai(
         client=client,
@@ -483,13 +487,14 @@ def gpt_preference_probe(
         temperature=gen.temperature,
         max_completion_tokens=gen.max_tokens,
         timeout=gen.timeout_seconds,
+        response_format=_build_probe_schema(display_order),
     )
- 
+
     try:
         parsed = parse_json_response(raw)
         parsed = _validate_probe_response(parsed)
     except (ValueError, KeyError) as exc:
-        print(f"  [openai_agent] Parse error for {player.id} probe — skipping this probe. {exc}")
+        print(f"  [openai_agent] Parse error for {player.id} probe — skipping. {exc}")
         logger.log_model_output(
             player_id=player.id,
             output_type="preference_probe",
@@ -501,7 +506,7 @@ def gpt_preference_probe(
             model=model_spec.model,
         )
         return None
- 
+
     logger.log_model_output(
         player_id=player.id,
         output_type="preference_probe",
@@ -512,7 +517,6 @@ def gpt_preference_probe(
         provider="openai",
         model=model_spec.model,
     )
- 
     return parsed
 
 def gpt_preference_probe_contextual(
@@ -523,6 +527,7 @@ def gpt_preference_probe_contextual(
     logger: Any,
     round_index: int,
     prior_history: List[Dict[str, str]],
+    display_order: List[str],
     goods: Iterable[str] = ("A", "B", "C"),
     trade_history: Optional[List[Dict[str, Any]]] = None,
     board_history: Optional[List[str]] = None,
@@ -551,6 +556,7 @@ def gpt_preference_probe_contextual(
     base_messages = build_preference_probe_messages(
         player=player,
         prompts=prompts,
+        display_order=display_order,
         goods=goods,
         round_index=round_index,
         trade_history=trade_history,
@@ -587,10 +593,9 @@ def gpt_preference_probe_contextual(
     except (ValueError, KeyError) as exc:
         print(f"  [openai_agent] Parse error for {player.id} contextual probe: {exc}")
         parsed = {
-            "ratings": {g: 5 for g in ["A", "B", "C"]},
-            "ratings_reasoning": {g: "" for g in ["A", "B", "C"]},
-            "desired_bundle_4_units": {"A": 2, "B": 1, "C": 1},
-            "role_important_goods": f"Parse error: {exc}",
+            "ratings_inventory": {g: 5 for g in display_order},
+            "ratings_general": {g: 5 for g in display_order},
+            "desired_bundle": {g: 2 for g in display_order},
         }
 
     logger.log_model_output(
@@ -605,3 +610,39 @@ def gpt_preference_probe_contextual(
     )
 
     return parsed, raw
+
+def _build_probe_schema(display_order: List[str]) -> Dict[str, Any]:
+    """
+    Build a Structured Outputs schema for the probe with goods in the given
+    display order. Property order matters: even though JSON is technically
+    unordered, the API respects the order given here when generating output.
+    """
+    def _int_object(order: List[str]) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {g: {"type": "integer"} for g in order},
+            "required": list(order),
+            "additionalProperties": False,
+        }
+
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "preference_probe",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "ratings_inventory": _int_object(display_order),
+                    "ratings_general":   _int_object(display_order),
+                    "desired_bundle":    _int_object(display_order),
+                },
+                "required": [
+                    "ratings_inventory",
+                    "ratings_general",
+                    "desired_bundle",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    }

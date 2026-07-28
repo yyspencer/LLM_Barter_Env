@@ -236,6 +236,7 @@ class ExperimentMetaConfig(BaseModel):
     description: str = ""
     seed: int = 42
     num_runs: int = Field(default=1, ge=1)
+    run_index: int = 1  # counterbalancing index, set by main.py per-iteration
 
 
 class ExperimentConfig(BaseModel):
