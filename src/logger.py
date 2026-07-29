@@ -141,6 +141,7 @@ class RunLogger:
     events: list[JsonDict] = field(default_factory=list)
     trades: list[JsonDict] = field(default_factory=list)
     preference_probes: list[JsonDict] = field(default_factory=list)
+    shadow_trades: list[JsonDict] = field(default_factory=list)
     summary: JsonDict = field(default_factory=dict)
 
     @property
@@ -315,6 +316,28 @@ class RunLogger:
             player_id=record.get("player_id"),
         )
 
+    def log_shadow_trade(self, shadow_trade_record: Mapping[str, Any]) -> None:
+        """
+        Add one shadow-trade record (a single hypothetical acquire/surrender
+        offer and its accept/reject response) to memory and event log.
+
+        These are purely hypothetical: unlike log_trade, nothing here is
+        ever applied to inventories or fed into later prompts.
+
+        Call finalize() to write shadow_trades.json.
+        """
+        record = {
+            "timestamp": utc_timestamp(),
+            **dict(shadow_trade_record),
+        }
+        self.shadow_trades.append(record)
+        self.log_event(
+            event_type="shadow_trade",
+            payload=record,
+            round_index=record.get("round_index"),
+            player_id=record.get("player_id"),
+        )
+
     def append_transcript(self, text: str) -> None:
         """
         Append human-readable transcript text.
@@ -335,6 +358,7 @@ class RunLogger:
         """
         write_json(self.path_for("trades", "trades.json"), self.trades)
         write_json(self.path_for("preference_probes", "preference_probes.json"), self.preference_probes)
+        write_json(self.path_for("shadow_trades", "shadow_trades.json"), self.shadow_trades)
         write_json(self.path_for("summary", "summary.json"), self.summary)
 
         self.log_event(
@@ -343,6 +367,7 @@ class RunLogger:
                 "num_events": len(self.events),
                 "num_trades": len(self.trades),
                 "num_preference_probes": len(self.preference_probes),
+                "num_shadow_trades": len(self.shadow_trades),
                 "summary_path": str(self.path_for("summary", "summary.json")),
             },
         )

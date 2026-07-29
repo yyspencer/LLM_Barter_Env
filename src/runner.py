@@ -35,24 +35,31 @@ from mock_agent import (
 )
 from pairing import generate_pairing_rounds
 from prompt_render import format_goods_dict
+from shadow_trades import (
+    build_shadow_proposed_trade,
+    feasible_specs_for_inventory,
+    generate_shadow_trade_specs_from_config,
+    is_player_eligible,
+)
 from utility import (
     apply_trade_to_inventory,
     player_starting_utility_summary,
     predicted_marginal_utilities,
     shifted_cobb_douglas,
 )
- 
- 
+
+
 # ---------------------------------------------------------------------------
 # Types
 # ---------------------------------------------------------------------------
- 
+
 Inventory = Dict[str, int]
- 
+
 # Agent callables — each returns the appropriate response dict.
-NegotiationFn = Callable[..., Dict[str, Any]]
-CommitmentFn  = Callable[..., Dict[str, Any]]
-ProbeFn       = Callable[..., Dict[str, Any]]
+NegotiationFn      = Callable[..., Dict[str, Any]]
+CommitmentFn       = Callable[..., Dict[str, Any]]
+ProbeFn            = Callable[..., Dict[str, Any]]
+ShadowCommitmentFn = Callable[..., Dict[str, Any]]
  
  
 # ---------------------------------------------------------------------------
@@ -180,9 +187,85 @@ def execute_trade(
  
  
 # ---------------------------------------------------------------------------
+# Shadow trades
+# ---------------------------------------------------------------------------
+
+def run_shadow_trades_for_player(
+    player: Any,
+    inventory: Inventory,
+    round_index: int,
+    label: str,
+    cfg: LoadedConfig,
+    logger: RunLogger,
+    shadow_commitment_fn: Optional[ShadowCommitmentFn],
+    specs: List[Dict[str, Any]],
+    display_order: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Send one player the full battery of feasible shadow trades (see
+    shadow_trades.py) and record each accept/reject response.
+
+    Each shadow trade is built and sent through ``shadow_commitment_fn``
+    exactly like a real commitment decision — same prompt shape, generic
+    fictitious partner — so the agent has no reason to treat it differently.
+    The response is only ever logged (transcript + shadow_trades.json + the
+    returned list, which callers attach to the concurrent probe record); it
+    is never applied to inventories and never fed into negotiation history,
+    trade history, or the bulletin board, so it cannot influence any later
+    prompt.
+
+    Returns [] if shadow trades are disabled, this player is not in the
+    configured player_ids, or shadow_commitment_fn is None (e.g. the random
+    baseline, which has no LLM to ask).
+    """
+    st_cfg = cfg.experiment.preference_drift.shadow_trades
+    if shadow_commitment_fn is None or not st_cfg.enabled:
+        return []
+    if not is_player_eligible(player.id, st_cfg.player_ids):
+        return []
+
+    feasible = feasible_specs_for_inventory(specs, inventory)
+    records: List[Dict[str, Any]] = []
+
+    for spec in feasible:
+        proposed_trade = build_shadow_proposed_trade(spec)
+        decision = shadow_commitment_fn(
+            player=player,
+            proposed_trade=proposed_trade,
+            round_index=round_index,
+            shadow_id=spec["shadow_id"],
+            display_order=display_order,
+        )
+
+        record = {
+            "round_index": round_index,
+            "probe_label": label,
+            "player_id": player.id,
+            "display_name": player.display_name,
+            "shadow_id": spec["shadow_id"],
+            "focal_good": spec["focal_good"],
+            "counter_good": spec["counter_good"],
+            "direction": spec["direction"],
+            "player_give": dict(spec["give"]),
+            "player_receive": dict(spec["receive"]),
+            "decision": decision.get("decision"),
+            "reasoning_summary": decision.get("reasoning_summary", ""),
+        }
+        records.append(record)
+        logger.log_shadow_trade(record)
+        logger.append_transcript(
+            f"[SHADOW {label}] {player.display_name}: {spec['direction']} offer — "
+            f"give {format_goods_dict(spec['give'])}, receive {format_goods_dict(spec['receive'])} "
+            f"=> {record['decision']}\n"
+        )
+
+    return records
+
+
+# ---------------------------------------------------------------------------
 # Preference probes
 # ---------------------------------------------------------------------------
- 
+
 def run_preference_probes(
     players: List[Any],
     inventories: Dict[str, Inventory],
@@ -190,6 +273,7 @@ def run_preference_probes(
     logger: RunLogger,
     cfg: LoadedConfig,
     probe_fn: ProbeFn,
+    shadow_commitment_fn: Optional[ShadowCommitmentFn] = None,
     display_order: Optional[List[str]] = None,
     label_override: Optional[str] = None,
     trade_history: Optional[Dict[str, List[Dict[str, Any]]]] = None,
@@ -198,16 +282,20 @@ def run_preference_probes(
 ) -> None:
     """
     Run preference elicitation probes for all players.
- 
+
     round_index=0  -> pre-run
     round_index=-1 -> post-run
     round_index=N  -> mid-experiment after round N
- 
+
     label_override, if provided, replaces the auto-derived label. Probe-only
     mode uses this to produce labels like ``probe_1``, ``probe_2``, ... that
     don't get confused with trade-round numbers.
- 
+
     probe_fn signature: (player, round_index) -> dict
+
+    shadow_commitment_fn, if given, sends every player the configured
+    battery of hypothetical shadow trades (see run_shadow_trades_for_player)
+    alongside their probe. Pass None to skip shadow trades entirely.
     """
     if label_override is not None:
         label = label_override
@@ -217,7 +305,13 @@ def run_preference_probes(
             else "post_run" if round_index == -1
             else f"round_{round_index}"
         )
- 
+
+    shadow_specs = (
+        generate_shadow_trade_specs_from_config(cfg)
+        if shadow_commitment_fn is not None
+        else []
+    )
+
     for player in players:
         response = probe_fn(
             player=player,
@@ -242,6 +336,18 @@ def run_preference_probes(
             shift=cfg.experiment.utility.terminal_utility.shift,
         )
 
+        shadow_trade_records = run_shadow_trades_for_player(
+            player=player,
+            inventory=current_inventory,
+            round_index=round_index,
+            label=label,
+            cfg=cfg,
+            logger=logger,
+            shadow_commitment_fn=shadow_commitment_fn,
+            specs=shadow_specs,
+            display_order=display_order,
+        )
+
         probe_record = {
             "round_index": round_index,
             "probe_label": label,
@@ -251,6 +357,7 @@ def run_preference_probes(
             "predicted_marginal_utility": predicted_marginal_utility,
             "display_order": list(display_order) if display_order else None,
             "response": response,
+            "shadow_trades": shadow_trade_records,
         }
         logger.log_preference_probe(probe_record)
         logger.append_transcript(
@@ -747,18 +854,21 @@ def _run_experiment_loop(
     negotiation_fn: NegotiationFn,
     commitment_fn: CommitmentFn,
     probe_fn: ProbeFn,
+    shadow_commitment_fn: Optional[ShadowCommitmentFn] = None,
     enable_probes: bool = True,
     bulletin_board: Optional[List[str]] = None,
 ) -> RunLogger:
     """
     Core loop shared by all run modes.
- 
+
     Callers construct agent callables and pass them in.
     This function owns all scheduling, inventory management, and summary writing.
- 
+
     When ``enable_probes`` is False, pre/mid/post preference probes are skipped
     regardless of the drift config. This is used by run modes that don't
     involve an LLM (e.g. the random baseline), where probes have no meaning.
+    shadow_commitment_fn is threaded through unchanged; passing None (the
+    default) skips shadow trades regardless of shadow_trades.enabled.
     """
     exp_cfg = cfg.experiment
     goods   = exp_cfg.market.goods
@@ -802,6 +912,7 @@ def _run_experiment_loop(
             logger=logger,
             cfg=cfg,
             probe_fn=probe_fn,
+            shadow_commitment_fn=shadow_commitment_fn,
             display_order=display_order,
             trade_history=trade_history,
             bulletin_board=bulletin_board if bulletin_board is not None else None,
@@ -856,6 +967,7 @@ def _run_experiment_loop(
                 logger=logger,
                 cfg=cfg,
                 probe_fn=probe_fn,
+                shadow_commitment_fn=shadow_commitment_fn,
                 display_order=display_order,
                 trade_history=trade_history,
                 bulletin_board=bulletin_board if bulletin_board is not None else None,
@@ -886,6 +998,7 @@ def _run_experiment_loop(
             logger=logger,
             cfg=cfg,
             probe_fn=probe_fn,
+            shadow_commitment_fn=shadow_commitment_fn,
             display_order=display_order,
             trade_history=trade_history,
             bulletin_board=bulletin_board if bulletin_board is not None else None,
@@ -1012,7 +1125,16 @@ def run_mock_experiment(cfg: LoadedConfig) -> RunLogger:
             player_id=player.id,
             weights=dict(player.utility_weights),
         )
- 
+
+    def shadow_commitment_fn(player, proposed_trade, round_index, shadow_id,
+                             display_order=None, _inv=starting_inventories, **_ignored):
+        return mock_commitment_decision(
+            player_id=player.id,
+            inventory=_inv.get(player.id, dict(player.inventory)),
+            weights=dict(player.utility_weights),
+            proposed_trade=proposed_trade,
+        )
+
     # Wrap execute_trade to keep the mock agent's inventory snapshot in sync
     # (the mock agent uses utility math on the live inventory for decisions)
     original_execute = execute_trade
@@ -1033,11 +1155,12 @@ def run_mock_experiment(cfg: LoadedConfig) -> RunLogger:
             negotiation_fn=negotiation_fn,
             commitment_fn=commitment_fn,
             probe_fn=probe_fn,
+            shadow_commitment_fn=shadow_commitment_fn,
             bulletin_board=bulletin_board if broadcast else None,
         )
     finally:
         _self.execute_trade = original_execute
- 
+
     print(f"\nMock run complete. Output written to: {logger.run_dir}")
     return result
  
@@ -1175,7 +1298,31 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             board_history=bulletin_board,
             broadcast=broadcast,
         )
- 
+
+    def shadow_commitment_fn(player, proposed_trade, round_index, shadow_id, display_order=None):
+        # Same prompt shape as a real commitment decision, generic
+        # fictitious partner, tagged "shadow_commitment" in the logs so it's
+        # never conflated with a real commitment decision.
+        player.inventory = live_inv[player.id]
+        return gpt_commitment_decision(
+            player=player,
+            prompts=prompts,
+            goods=goods,
+            proposed_trade=proposed_trade,
+            model_spec=gpt_spec,
+            client=client,
+            logger=logger,
+            round_index=round_index,
+            pair_id=f"shadow_{shadow_id}",
+            display_order=display_order,
+            partner_name="another trader in the market",
+            negotiation_history=None,
+            board_history=bulletin_board if broadcast else None,
+            broadcast=broadcast,
+            prompt_type="shadow_commitment",
+            output_type="shadow_commitment",
+        )
+
     # Wrap execute_trade to keep live_inv in sync with the loop's inventories
     original_execute = execute_trade
  
@@ -1195,11 +1342,12 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             negotiation_fn=negotiation_fn,
             commitment_fn=commitment_fn,
             probe_fn=probe_fn,
+            shadow_commitment_fn=shadow_commitment_fn,
             bulletin_board=bulletin_board,
         )
     finally:
         _self.execute_trade = original_execute
- 
+
     print(f"\nGPT run complete. Output written to: {logger.run_dir}")
     return result
 
@@ -1390,7 +1538,11 @@ def run_probe_only_experiment(
     without modification.
     """
     from openai import OpenAI
-    from openai_agent import gpt_preference_probe, gpt_preference_probe_contextual
+    from openai_agent import (
+        gpt_commitment_decision,
+        gpt_preference_probe,
+        gpt_preference_probe_contextual,
+    )
     from prompt_render import build_preference_probe_messages
 
     if count < 1:
@@ -1481,6 +1633,28 @@ def run_probe_only_experiment(
         p.id: [] for p in players
     }
 
+    def shadow_commitment_fn(player, proposed_trade, round_index, shadow_id, display_order=None):
+        return gpt_commitment_decision(
+            player=player,
+            prompts=prompts,
+            goods=exp_cfg.market.goods,
+            proposed_trade=proposed_trade,
+            model_spec=gpt_spec,
+            client=client,
+            logger=logger,
+            round_index=round_index,
+            pair_id=f"shadow_{shadow_id}",
+            display_order=display_order,
+            partner_name="another trader in the market",
+            negotiation_history=None,
+            board_history=None,
+            broadcast=False,
+            prompt_type="shadow_commitment",
+            output_type="shadow_commitment",
+        )
+
+    shadow_specs = generate_shadow_trade_specs_from_config(cfg)
+
     for i in range(1, count + 1):
         logger.append_transcript(f"\n--- Probe iteration {i} of {count} ---\n")
 
@@ -1525,6 +1699,18 @@ def run_probe_only_experiment(
                 shift=exp_cfg.utility.terminal_utility.shift,
             )
 
+            shadow_trade_records = run_shadow_trades_for_player(
+                player=player,
+                inventory=current_inventory,
+                round_index=i,
+                label=f"probe_{i}",
+                cfg=cfg,
+                logger=logger,
+                shadow_commitment_fn=shadow_commitment_fn,
+                specs=shadow_specs,
+                display_order=display_order,
+            )
+
             probe_record = {
                 "round_index": i,
                 "probe_label": f"probe_{i}",
@@ -1535,6 +1721,7 @@ def run_probe_only_experiment(
                 "display_order": list(display_order),
                 "response": parsed,
                 "with_context": with_context,
+                "shadow_trades": shadow_trade_records,
             }
             logger.log_preference_probe(probe_record)
             logger.append_transcript(

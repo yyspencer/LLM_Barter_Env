@@ -375,12 +375,19 @@ def gpt_commitment_decision(
     negotiation_history: Optional[List[Dict[str, Any]]] = None,
     board_history: Optional[List[str]] = None,
     broadcast: bool = False,
+    prompt_type: str = "commitment",
+    output_type: str = "commitment",
 ) -> Dict[str, Any]:
     """Call GPT for a commitment decision (accept/reject a finalised trade).
 
     Now receives the full negotiation history with the partner (so the
     decision is made in context of the full exchange) and, under broadcast,
     the public market bulletin board.
+
+    prompt_type/output_type are overridable so callers that reuse this exact
+    prompt shape for a different purpose (e.g. shadow_trades.py's hypothetical
+    offers) can tag their logs distinctly from real commitment decisions,
+    without duplicating this function.
     """
     messages = build_commitment_messages(
         player=player,
@@ -397,12 +404,12 @@ def gpt_commitment_decision(
  
     logger.log_prompt(
         player_id=player.id,
-        prompt_type="commitment",
+        prompt_type=prompt_type,
         messages=messages,
         round_index=round_index,
         pair_id=pair_id,
     )
- 
+
     gen = model_spec.generation
     raw = _call_openai(
         client=client,
@@ -412,7 +419,7 @@ def gpt_commitment_decision(
         max_completion_tokens=gen.max_tokens,
         timeout=gen.timeout_seconds,
     )
- 
+
     try:
         parsed = parse_json_response(raw)
         parsed = _validate_commitment_decision(parsed)
@@ -422,10 +429,10 @@ def gpt_commitment_decision(
             "decision": "reject",
             "reasoning_summary": f"Parse error: {exc}",
         }
- 
+
     logger.log_model_output(
         player_id=player.id,
-        output_type="commitment",
+        output_type=output_type,
         raw_output=raw,
         parsed_output=parsed,
         round_index=round_index,

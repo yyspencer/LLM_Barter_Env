@@ -191,10 +191,50 @@ class ProbeScheduleConfig(BaseModel):
     include_post_probe: bool = True
 
 
+class ShadowTradesConfig(BaseModel):
+    """
+    Config for "shadow" commitment probes: hypothetical one-off trade offers
+    sent alongside every preference probe to surface acquire/surrender
+    behaviour for goods (e.g. B) that rarely come up in real negotiated
+    trades. Each shadow trade is framed to the agent exactly like a real
+    commitment decision, but the accept/reject response is never applied to
+    inventories and never appears in any later prompt (negotiation history,
+    trade history, or bulletin board).
+
+    Modular by design: which goods are probed, which goods they're traded
+    against, at what quantities, in which directions, and which players are
+    asked are all config-driven so the battery can be reshaped without code
+    changes.
+    """
+    enabled: bool = False
+
+    # Goods whose acquire/surrender behaviour we want more signal on.
+    focal_goods: List[str] = Field(default_factory=lambda: ["B"])
+
+    # Goods to pair each focal good against. Null = every other market good.
+    counter_goods: Optional[List[str]] = None
+
+    # Quantity of the focal good in every shadow trade (kept at 1 so the
+    # response reads as a marginal-unit valuation).
+    focal_quantity: int = Field(default=1, ge=1)
+
+    # Quantities of the counter good to try against each focal/counter pair.
+    counter_quantities: List[int] = Field(default_factory=lambda: [1, 2])
+
+    # "acquire" = player is offered the focal good in exchange for the
+    # counter good. "surrender" = player is offered the counter good in
+    # exchange for the focal good.
+    directions: List[str] = Field(default_factory=lambda: ["acquire", "surrender"])
+
+    # Player ids to run shadow trades for. Null = every player.
+    player_ids: Optional[List[str]] = None
+
+
 class PreferenceDriftConfig(BaseModel):
     enabled: bool = True
     probe_schedule: ProbeScheduleConfig
     save_probe_responses: bool = True
+    shadow_trades: ShadowTradesConfig = Field(default_factory=ShadowTradesConfig)
 
 
 class InitializationModeConfig(BaseModel):

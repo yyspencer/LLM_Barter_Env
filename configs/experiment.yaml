@@ -127,6 +127,21 @@ preference_drift:
   # Store the elicited stated preferences separately from trade logs.
   save_probe_responses: true
 
+  # Shadow trades: hypothetical one-off commitment offers sent to every
+  # player alongside each preference probe, to get acquire/surrender signal
+  # on goods that don't come up often enough in real negotiated trades.
+  # Each agent sees a normal-looking commitment prompt (so it reads as a
+  # real offer), but the decision is never applied to inventories and never
+  # leaks into any later prompt.
+  shadow_trades:
+    enabled: true
+    focal_goods: [B]
+    counter_goods: null       # null = every other market good (A, C)
+    focal_quantity: 1
+    counter_quantities: [1, 2]
+    directions: [acquire, surrender]
+    player_ids: [player_5, player_6]          # null = every player
+
 initialization:
   utilities:
     mode: manual
@@ -163,4 +178,5 @@ logging:
     trades: trades.json
     summary: summary.json
     preference_probes: preference_probes.json
+    shadow_trades: shadow_trades.json
     transcripts: transcripts.txt
