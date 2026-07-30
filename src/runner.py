@@ -33,7 +33,7 @@ from mock_agent import (
     mock_negotiation_action,
     mock_preference_probe,
 )
-from pairing import generate_pairing_rounds
+from pairing import generate_pairing_rounds, resolve_total_rounds
 from prompt_render import format_goods_dict
 from shadow_trades import (
     build_shadow_proposed_trade,
@@ -224,6 +224,12 @@ def run_shadow_trades_for_player(
     if not is_player_eligible(player.id, st_cfg.player_ids):
         return []
 
+    goods = cfg.experiment.market.goods
+    shift = cfg.experiment.utility.terminal_utility.shift
+    utility_before = shifted_cobb_douglas(
+        inventory=inventory, weights=player.utility_weights, shift=shift, goods=goods,
+    )
+
     feasible = feasible_specs_for_inventory(specs, inventory)
     records: List[Dict[str, Any]] = []
 
@@ -237,6 +243,16 @@ def run_shadow_trades_for_player(
             display_order=display_order,
         )
 
+        # Hypothetical only — this is never applied to the real inventory,
+        # just computed to report what accepting this offer *would* have
+        # done, alongside the agent's actual accept/reject response.
+        inventory_after = apply_trade_to_inventory(
+            inventory=inventory, give=spec["give"], receive=spec["receive"], goods=goods,
+        )
+        utility_after = shifted_cobb_douglas(
+            inventory=inventory_after, weights=player.utility_weights, shift=shift, goods=goods,
+        )
+
         record = {
             "round_index": round_index,
             "probe_label": label,
@@ -248,6 +264,10 @@ def run_shadow_trades_for_player(
             "direction": spec["direction"],
             "player_give": dict(spec["give"]),
             "player_receive": dict(spec["receive"]),
+            "inventory_before": dict(inventory),
+            "inventory_after": inventory_after,
+            "utility_before": utility_before,
+            "utility_after": utility_after,
             "decision": decision.get("decision"),
             "reasoning_summary": decision.get("reasoning_summary", ""),
         }
@@ -841,8 +861,65 @@ def should_probe(
         return round_index == midpoint
 
     return False
- 
- 
+
+
+# ---------------------------------------------------------------------------
+# Washout schedule
+# ---------------------------------------------------------------------------
+
+def base_total_rounds(exp_cfg: Any, num_players: int) -> int:
+    """
+    Number of rounds in the "normal" schedule, before any washout rounds are
+    appended. Pure function of config + player count so it can be computed
+    identically wherever it's needed (the main loop and the negotiation/
+    commitment closures both need it, and they run in different functions).
+    """
+    return resolve_total_rounds(
+        num_players=num_players,
+        num_rounds=exp_cfg.rounds.max_rounds_override,
+        round_multiplier=exp_cfg.rounds.round_multiplier,
+    )
+
+
+def washout_round_indices(exp_cfg: Any, num_players: int) -> set[int]:
+    """Absolute round indices that belong to the washout block, if enabled."""
+    washout_cfg = exp_cfg.washout
+    if not washout_cfg.enabled or washout_cfg.num_rounds <= 0:
+        return set()
+    base = base_total_rounds(exp_cfg, num_players)
+    return set(range(base + 1, base + washout_cfg.num_rounds + 1))
+
+
+def washout_probe_round_indices(exp_cfg: Any, num_players: int) -> set[int]:
+    """Absolute round indices after which a washout probe should fire."""
+    washout_cfg = exp_cfg.washout
+    if not washout_cfg.enabled or washout_cfg.num_rounds <= 0:
+        return set()
+    base = base_total_rounds(exp_cfg, num_players)
+    return {base + offset for offset in washout_cfg.probe_after_washout_rounds}
+
+
+def effective_broadcast(exp_cfg: Any, num_players: int, round_index: int) -> bool:
+    """
+    Whether the market bulletin should be shown/recorded for this round or
+    probe. Same as mechanism.broadcast_completed_trades, except forced off
+    during washout rounds when washout.disable_broadcast is set — even
+    though the underlying mechanism config is unchanged for the rest of the
+    run. round_index=0 (pre-run) and -1 (post-run) never fall in the
+    washout block, so they're unaffected.
+    """
+    base_broadcast = exp_cfg.mechanism.broadcast_completed_trades
+    washout_cfg = exp_cfg.washout
+    if (
+        base_broadcast
+        and washout_cfg.enabled
+        and washout_cfg.disable_broadcast
+        and round_index in washout_round_indices(exp_cfg, num_players)
+    ):
+        return False
+    return base_broadcast
+
+
 # ---------------------------------------------------------------------------
 # Shared experiment loop
 # ---------------------------------------------------------------------------
@@ -901,10 +978,16 @@ def _run_experiment_loop(
             f"inv={summary['inventory']}, U={summary['utility']:.4f}\n"
         )
  
+    num_players = len(players)
+    washout_cfg = exp_cfg.washout
+    washout_rounds = washout_round_indices(exp_cfg, num_players)
+    washout_probe_rounds = washout_probe_round_indices(exp_cfg, num_players)
+
     # Pre-run probe
     drift_cfg = exp_cfg.preference_drift
     if enable_probes and drift_cfg.enabled and drift_cfg.probe_schedule.include_pre_probe:
         logger.append_transcript("\n[PRE-RUN PREFERENCE PROBES]\n")
+        pre_run_broadcast = effective_broadcast(exp_cfg, num_players, round_index=0)
         run_preference_probes(
             players=players,
             inventories=inventories,
@@ -915,25 +998,36 @@ def _run_experiment_loop(
             shadow_commitment_fn=shadow_commitment_fn,
             display_order=display_order,
             trade_history=trade_history,
-            bulletin_board=bulletin_board if bulletin_board is not None else None,
-            broadcast=cfg.experiment.mechanism.broadcast_completed_trades,
+            bulletin_board=bulletin_board if pre_run_broadcast else None,
+            broadcast=pre_run_broadcast,
         )
- 
-    # Pairing schedule
+
+    # Pairing schedule — extended with washout_cfg.num_rounds extra rounds
+    # (same pairing mechanism, just appended) when washout is enabled.
+    total_scheduled_rounds = base_total_rounds(exp_cfg, num_players) + len(washout_rounds)
     pairing_rounds = generate_pairing_rounds(
         player_ids=[p.id for p in players],
-        num_rounds=exp_cfg.rounds.max_rounds_override,
+        num_rounds=total_scheduled_rounds,
         round_multiplier=exp_cfg.rounds.round_multiplier,
         reshuffle_between_cycles=exp_cfg.pairing.reshuffle_between_runs,
         seed=exp_cfg.experiment.seed,
     )
- 
+
+    if washout_rounds:
+        logger.append_transcript(
+            f"\n[WASHOUT ENABLED: {washout_cfg.num_rounds} extra rounds appended "
+            f"(rounds {min(washout_rounds)}-{max(washout_rounds)}). "
+            f"Broadcast disabled for these rounds: {washout_cfg.disable_broadcast}. "
+            f"Washout probes scheduled after rounds: {sorted(washout_probe_rounds)}]\n"
+        )
+
     all_trade_records: List[Dict[str, Any]] = []
     total_rounds = len(pairing_rounds)
- 
+
     for pr in pairing_rounds:
         round_index = pr.round_index
- 
+        round_broadcast = effective_broadcast(exp_cfg, num_players, round_index)
+
         round_trades = run_round(
             round_index=round_index,
             pairs=pr.pairs,
@@ -944,21 +1038,27 @@ def _run_experiment_loop(
             trade_history=trade_history,
             negotiation_fn=negotiation_fn,
             commitment_fn=commitment_fn,
-            bulletin_board=bulletin_board,
+            bulletin_board=bulletin_board if round_broadcast else None,
             display_order=display_order,
         )
         all_trade_records.extend(round_trades)
- 
+
         # Mid-run preference probe. This runs AFTER the round's trades have
         # been negotiated and applied to inventories, so a probe labelled
         # "after round N" genuinely reflects the state once round N is
-        # complete (not the state going into round N).
+        # complete (not the state going into round N). Washout rounds add
+        # their own probe points (washout_probe_rounds) on top of the
+        # normal interval/midpoint schedule.
         if (
             enable_probes
-            and should_probe(round_index, cfg, total_rounds=total_rounds)
+            and (
+                should_probe(round_index, cfg, total_rounds=total_rounds)
+                or round_index in washout_probe_rounds
+            )
         ):
+            washout_note = " (washout)" if round_index in washout_rounds else ""
             logger.append_transcript(
-                f"\n[MID-RUN PREFERENCE PROBE — after round {round_index}]\n"
+                f"\n[MID-RUN PREFERENCE PROBE — after round {round_index}{washout_note}]\n"
             )
             run_preference_probes(
                 players=players,
@@ -970,8 +1070,8 @@ def _run_experiment_loop(
                 shadow_commitment_fn=shadow_commitment_fn,
                 display_order=display_order,
                 trade_history=trade_history,
-                bulletin_board=bulletin_board if bulletin_board is not None else None,
-                broadcast=cfg.experiment.mechanism.broadcast_completed_trades,
+                bulletin_board=bulletin_board if round_broadcast else None,
+                broadcast=round_broadcast,
             )
 
         n_stop = exp_cfg.stopping.stop_if_no_trades_for_n_rounds
@@ -991,6 +1091,7 @@ def _run_experiment_loop(
     # Post-run probe
     if enable_probes and drift_cfg.enabled and drift_cfg.probe_schedule.include_post_probe:
         logger.append_transcript("\n[POST-RUN PREFERENCE PROBES]\n")
+        post_run_broadcast = effective_broadcast(exp_cfg, num_players, round_index=-1)
         run_preference_probes(
             players=players,
             inventories=inventories,
@@ -1001,8 +1102,8 @@ def _run_experiment_loop(
             shadow_commitment_fn=shadow_commitment_fn,
             display_order=display_order,
             trade_history=trade_history,
-            bulletin_board=bulletin_board if bulletin_board is not None else None,
-            broadcast=cfg.experiment.mechanism.broadcast_completed_trades,
+            bulletin_board=bulletin_board if post_run_broadcast else None,
+            broadcast=post_run_broadcast,
         )
  
     # Final summary
@@ -1237,11 +1338,18 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
     # market activity so far. Gated by broadcast_completed_trades.
     broadcast = cfg.experiment.mechanism.broadcast_completed_trades
     bulletin_board: Optional[List[str]] = [] if broadcast else None
- 
+    num_players = len(cfg.players.players)
+
+    def _round_broadcast(round_index: int) -> bool:
+        # Same as `broadcast`, except forced off during washout rounds when
+        # washout.disable_broadcast is set (see effective_broadcast).
+        return effective_broadcast(exp_cfg, num_players, round_index)
+
     def negotiation_fn(player, partner, negotiation_history, turn_index,
                        round_index, pair_id, display_order=None):
         # Patch player.inventory so prompt_render sees the live state
         player.inventory = live_inv[player.id]
+        round_broadcast = _round_broadcast(round_index)
         return gpt_negotiation_action(
             player=player,
             prompts=prompts,
@@ -1256,14 +1364,15 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             pair_id=pair_id,
             display_order=display_order,
             action_space=exp_cfg.mechanism.action_space,
-            board_history=bulletin_board if broadcast else None,
-            broadcast=broadcast,
+            board_history=bulletin_board if round_broadcast else None,
+            broadcast=round_broadcast,
         )
 
     def commitment_fn(player, proposed_trade, round_index, pair_id,
                       partner_name="your partner", negotiation_history=None,
                       display_order=None):
         player.inventory = live_inv[player.id]
+        round_broadcast = _round_broadcast(round_index)
         return gpt_commitment_decision(
             player=player,
             prompts=prompts,
@@ -1277,8 +1386,8 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             display_order=display_order,
             partner_name=partner_name,
             negotiation_history=negotiation_history,
-            board_history=bulletin_board if broadcast else None,
-            broadcast=broadcast,
+            board_history=bulletin_board if round_broadcast else None,
+            broadcast=round_broadcast,
         )
  
     def probe_fn(player, round_index, trade_history=None,
@@ -1304,6 +1413,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
         # fictitious partner, tagged "shadow_commitment" in the logs so it's
         # never conflated with a real commitment decision.
         player.inventory = live_inv[player.id]
+        round_broadcast = _round_broadcast(round_index)
         return gpt_commitment_decision(
             player=player,
             prompts=prompts,
@@ -1317,8 +1427,8 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             display_order=display_order,
             partner_name="another trader in the market",
             negotiation_history=None,
-            board_history=bulletin_board if broadcast else None,
-            broadcast=broadcast,
+            board_history=bulletin_board if round_broadcast else None,
+            broadcast=round_broadcast,
             prompt_type="shadow_commitment",
             output_type="shadow_commitment",
         )

@@ -1,0 +1,548 @@
+{
+  "experiment": {
+    "version": 1,
+    "experiment": {
+      "name": "preference_drift_v1_parallel_pairs_run_2",
+      "description": "Multi-agent barter environment for measuring stated and revealed preference drift under repeated pairwise negotiation. Agents trade in independent pairs within each round, and all pairs in the same round can be run in parallel.\n",
+      "seed": 43,
+      "num_runs": 1,
+      "run_index": 2
+    },
+    "market": {
+      "goods": [
+        "A",
+        "B",
+        "C"
+      ],
+      "num_players": 6
+    },
+    "rounds": {
+      "mode": "round_robin",
+      "round_multiplier": 2,
+      "max_rounds_override": null
+    },
+    "washout": {
+      "enabled": true,
+      "num_rounds": 4,
+      "disable_broadcast": true,
+      "probe_after_washout_rounds": [
+        2,
+        4
+      ]
+    },
+    "pairing": {
+      "mode": "round_robin_disjoint_pairs",
+      "allow_repeat_pairings_within_cycle": false,
+      "reshuffle_between_runs": true,
+      "handle_odd_player_count": "bye"
+    },
+    "mechanism": {
+      "execution_mode": "parallel_pairs",
+      "synchronization": "end_of_round",
+      "negotiation_turns_per_agent": 5,
+      "action_space": "any_bundle",
+      "allow_no_trade": true,
+      "require_mutual_acceptance": true,
+      "enforce_inventory_constraints": true,
+      "integer_goods_only": true,
+      "anonymous": false,
+      "broadcast_completed_trades": false,
+      "broadcast_filter_players": [
+        "player_3",
+        "player_4"
+      ],
+      "bulletin_rules": [
+        {
+          "player": "player_3",
+          "gains": "B",
+          "template": "bulletin_p3_gains_b"
+        },
+        {
+          "player": "player_4",
+          "gains": "B",
+          "template": "bulletin_p4_gains_b"
+        },
+        {
+          "player": "player_3",
+          "gains": "A",
+          "template": "bulletin_p3_gains_a"
+        },
+        {
+          "player": "player_4",
+          "gains": "A",
+          "template": "bulletin_p4_gains_a"
+        }
+      ],
+      "mediator_enabled": false
+    },
+    "trade_rules": {
+      "require_mutual_acceptance": true,
+      "allow_counteroffers": true,
+      "enforce_inventory_constraints": true,
+      "integer_goods_only": true,
+      "min_units_per_side": 1,
+      "max_units_per_side": 3,
+      "conflict_resolution": {
+        "enabled": true,
+        "method": "reject_conflicting_trades"
+      }
+    },
+    "utility": {
+      "terminal_utility": {
+        "type": "shifted_cobb_douglas",
+        "shift": 1.0,
+        "normalize_weights": true
+      }
+    },
+    "preference_drift": {
+      "enabled": true,
+      "probe_schedule": {
+        "mode": "interval_rounds",
+        "interval_rounds": 5,
+        "include_pre_probe": true,
+        "include_post_probe": false
+      },
+      "save_probe_responses": true,
+      "shadow_trades": {
+        "enabled": true,
+        "focal_goods": [
+          "B"
+        ],
+        "counter_goods": null,
+        "focal_quantity": 1,
+        "counter_quantities": [
+          1,
+          2
+        ],
+        "directions": [
+          "acquire",
+          "surrender"
+        ],
+        "player_ids": [
+          "player_5",
+          "player_6"
+        ]
+      }
+    },
+    "initialization": {
+      "utilities": {
+        "mode": "manual",
+        "require_weights_sum_to_one": true,
+        "require_nonnegative_integer_entries": null,
+        "avoid_initial_optimal_bundle": null,
+        "require_gains_from_trade_exist": null,
+        "include_exact_formula_in_prompt": null
+      },
+      "endowments": {
+        "mode": "manual",
+        "require_weights_sum_to_one": null,
+        "require_nonnegative_integer_entries": true,
+        "avoid_initial_optimal_bundle": true,
+        "require_gains_from_trade_exist": true,
+        "include_exact_formula_in_prompt": null
+      },
+      "personas": {
+        "mode": "generated_from_preferences",
+        "require_weights_sum_to_one": null,
+        "require_nonnegative_integer_entries": null,
+        "avoid_initial_optimal_bundle": null,
+        "require_gains_from_trade_exist": null,
+        "include_exact_formula_in_prompt": false
+      }
+    },
+    "stopping": {
+      "stop_after_all_rounds": true,
+      "stop_if_no_trades_for_n_rounds": null,
+      "stop_if_market_converged": false
+    },
+    "logging": {
+      "output_dir": "runs",
+      "save_config_snapshot": true,
+      "save_event_jsonl": true,
+      "save_trade_json": true,
+      "save_summary_json": true,
+      "save_raw_prompts": true,
+      "save_raw_model_outputs": true,
+      "save_preference_probes": true,
+      "pretty_print_transcripts": true,
+      "filenames": {
+        "events": "events.jsonl",
+        "trades": "trades.json",
+        "summary": "summary.json",
+        "preference_probes": "preference_probes.json",
+        "shadow_trades": "shadow_trades.json",
+        "transcripts": "transcripts.txt"
+      }
+    }
+  },
+  "models": {
+    "version": 1,
+    "model_pool": [
+      {
+        "id": "gpt",
+        "enabled": true,
+        "provider": "openai",
+        "model": "gpt-5.4",
+        "api_env_var": "OPENAI_API_KEY",
+        "count": 6,
+        "generation": {
+          "temperature": 0.7,
+          "max_tokens": 1000,
+          "timeout_seconds": 60
+        },
+        "api_key": "***REDACTED***"
+      },
+      {
+        "id": "gemini",
+        "enabled": false,
+        "provider": "google",
+        "model": "gemini-2.5-pro",
+        "api_env_var": "GOOGLE_API_KEY",
+        "count": 0,
+        "generation": {
+          "temperature": 0.7,
+          "max_tokens": 400,
+          "timeout_seconds": 60
+        },
+        "api_key": "***REDACTED***"
+      },
+      {
+        "id": "claude",
+        "enabled": false,
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "api_env_var": "ANTHROPIC_API_KEY",
+        "count": 0,
+        "generation": {
+          "temperature": 0.7,
+          "max_tokens": 400,
+          "timeout_seconds": 60
+        },
+        "api_key": "***REDACTED***"
+      },
+      {
+        "id": "grok",
+        "enabled": false,
+        "provider": "xai",
+        "model": "grok-4",
+        "api_env_var": "XAI_API_KEY",
+        "count": 0,
+        "generation": {
+          "temperature": 0.7,
+          "max_tokens": 400,
+          "timeout_seconds": 60
+        },
+        "api_key": "***REDACTED***"
+      }
+    ],
+    "assignment": {
+      "mode": "expand_by_count"
+    }
+  },
+  "players": {
+    "version": 1,
+    "players": [
+      {
+        "id": "player_1",
+        "display_name": "Agent 1",
+        "model_id": "gpt",
+        "inventory": {
+          "A": 1,
+          "B": 0,
+          "C": 3
+        },
+        "utility_weights": {
+          "A": 0.7,
+          "B": 0.2,
+          "C": 0.1
+        },
+        "preference_description": "You are a builder. Good A is the most important good to you, but each additional unit of A is less valuable than the previous one. Good B is moderately useful to acquire, especially if you have little or none. Good C is only weakly useful, though it still has some value.\n",
+        "role": "Builder",
+        "utility_type": "shifted_cobb_douglas",
+        "utility_formula": "(x_A+1)^0.7 * (x_B+1)^0.2 * (x_C+1)^0.1",
+        "model": {
+          "id": "gpt",
+          "enabled": true,
+          "provider": "openai",
+          "model": "gpt-5.4",
+          "api_env_var": "OPENAI_API_KEY",
+          "count": 6,
+          "generation": {
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "timeout_seconds": 60
+          },
+          "api_key": "***REDACTED***"
+        }
+      },
+      {
+        "id": "player_2",
+        "display_name": "Agent 2",
+        "model_id": "gpt",
+        "inventory": {
+          "A": 1,
+          "B": 0,
+          "C": 3
+        },
+        "utility_weights": {
+          "A": 0.7,
+          "B": 0.2,
+          "C": 0.1
+        },
+        "preference_description": "You are a builder. Good A is the most important good to you, but each additional unit of A is less valuable than the previous one. Good B is moderately useful to acquire, especially if you have little or none. Good C is only weakly useful, though it still has some value.\n",
+        "role": "Builder",
+        "utility_type": "shifted_cobb_douglas",
+        "utility_formula": "(x_A+1)^0.7 * (x_B+1)^0.2 * (x_C+1)^0.1",
+        "model": {
+          "id": "gpt",
+          "enabled": true,
+          "provider": "openai",
+          "model": "gpt-5.4",
+          "api_env_var": "OPENAI_API_KEY",
+          "count": 6,
+          "generation": {
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "timeout_seconds": 60
+          },
+          "api_key": "***REDACTED***"
+        }
+      },
+      {
+        "id": "player_3",
+        "display_name": "Agent 3",
+        "model_id": "gpt",
+        "inventory": {
+          "A": 3,
+          "B": 1,
+          "C": 0
+        },
+        "utility_weights": {
+          "A": 0.1,
+          "B": 0.7,
+          "C": 0.2
+        },
+        "preference_description": "You are a weaver. Good B is the most important good to you, but each additional unit of B is less valuable than the previous one. Good C is moderately useful to acquire, especially if you have little or none. Good A is only weakly useful, though it still has some value.\n",
+        "role": "Weaver",
+        "utility_type": "shifted_cobb_douglas",
+        "utility_formula": "(x_A+1)^0.1 * (x_B+1)^0.7 * (x_C+1)^0.2",
+        "model": {
+          "id": "gpt",
+          "enabled": true,
+          "provider": "openai",
+          "model": "gpt-5.4",
+          "api_env_var": "OPENAI_API_KEY",
+          "count": 6,
+          "generation": {
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "timeout_seconds": 60
+          },
+          "api_key": "***REDACTED***"
+        }
+      },
+      {
+        "id": "player_4",
+        "display_name": "Agent 4",
+        "model_id": "gpt",
+        "inventory": {
+          "A": 3,
+          "B": 1,
+          "C": 0
+        },
+        "utility_weights": {
+          "A": 0.1,
+          "B": 0.7,
+          "C": 0.2
+        },
+        "preference_description": "You are a weaver. Good B is the most important good to you, but each additional unit of B is less valuable than the previous one. Good C is moderately useful to acquire, especially if you have little or none. Good A is only weakly useful, though it still has some value.\n",
+        "role": "Weaver",
+        "utility_type": "shifted_cobb_douglas",
+        "utility_formula": "(x_A+1)^0.1 * (x_B+1)^0.7 * (x_C+1)^0.2",
+        "model": {
+          "id": "gpt",
+          "enabled": true,
+          "provider": "openai",
+          "model": "gpt-5.4",
+          "api_env_var": "OPENAI_API_KEY",
+          "count": 6,
+          "generation": {
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "timeout_seconds": 60
+          },
+          "api_key": "***REDACTED***"
+        }
+      },
+      {
+        "id": "player_5",
+        "display_name": "Agent 5",
+        "model_id": "gpt",
+        "inventory": {
+          "A": 1,
+          "B": 1,
+          "C": 1
+        },
+        "utility_weights": {
+          "A": 0.33,
+          "B": 0.33,
+          "C": 0.33
+        },
+        "preference_description": "You are a merchant. You value {good_1}, {good_2}, and {good_3} equally in general. Because you prefer variety, goods you currently have less of are more valuable to you than goods you already have in larger quantities.\n",
+        "role": "Merchant",
+        "utility_type": "shifted_cobb_douglas",
+        "utility_formula": "(x_A+1)^0.33 * (x_B+1)^0.33 * (x_C+1)^0.33",
+        "model": {
+          "id": "gpt",
+          "enabled": true,
+          "provider": "openai",
+          "model": "gpt-5.4",
+          "api_env_var": "OPENAI_API_KEY",
+          "count": 6,
+          "generation": {
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "timeout_seconds": 60
+          },
+          "api_key": "***REDACTED***"
+        }
+      },
+      {
+        "id": "player_6",
+        "display_name": "Agent 6",
+        "model_id": "gpt",
+        "inventory": {
+          "A": 1,
+          "B": 1,
+          "C": 1
+        },
+        "utility_weights": {
+          "A": 0.33,
+          "B": 0.33,
+          "C": 0.33
+        },
+        "preference_description": "You are a merchant. You value {good_1}, {good_2}, and {good_3} equally in general. Because you prefer variety, goods you currently have less of are more valuable to you than goods you already have in larger quantities.\n",
+        "role": "Merchant",
+        "utility_type": "shifted_cobb_douglas",
+        "utility_formula": "(x_A+1)^0.33 * (x_B+1)^0.33 * (x_C+1)^0.33",
+        "model": {
+          "id": "gpt",
+          "enabled": true,
+          "provider": "openai",
+          "model": "gpt-5.4",
+          "api_env_var": "OPENAI_API_KEY",
+          "count": 6,
+          "generation": {
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "timeout_seconds": 60
+          },
+          "api_key": "***REDACTED***"
+        }
+      }
+    ]
+  },
+  "prompts": {
+    "version": 1.1,
+    "prompting_policy": {
+      "use_hidden_chain_of_thought": false,
+      "require_reasoning_summary": true,
+      "require_json_outputs": true
+    },
+    "system_prompt": "You are participating in a trading simulation. There are 3 types of goods: {good_1}, {good_2}, and {good_3}. You may negotiate with other participants to exchange goods. Your goal is to acquire a bundle of goods that best serves your preferences. Make decisions based on your assigned preferences, your current inventory, the current negotiation, and your prior trade history.\n",
+    "persona_template": "You are {display_name}. {preference_description}\n",
+    "world_state_control_template": "Current round: {round_index}\n\nYour inventory: {inventory_line}\n\nRecent trades you completed:\n{trade_history}\n\nNegotiation History:\n{negotiation_history}\n",
+    "world_state_broadcast_template": "Current round: {round_index}\n\nYour inventory: {inventory_line}\n\nRecent trades you completed:\n{trade_history}\n\nNegotiation History:\n{negotiation_history}\n\nMarket Bulletin Board (all completed trades across the market):\n{board_history}\n",
+    "negotiation_first_message_prompt": "You are now negotiating with {partner_name}.\n\nOn your turn you may:\n- make an offer (action_type \"offer\"): propose a trade. Your partner\n  will then separately accept or reject it. You MUST set\n  action_type to \"offer\" AND fill in proposed_trade. Describing a\n  trade only in the message text does NOT create an offer\n- send a message or ask a question (action_type \"message\"): explain\n  what you are looking for. The negotiation continues afterward.\n- END all trading with this partner (action_type \"no_trade\" or\n  \"reject\"): this is FINAL for this round — no further offers can be\n  exchanged with this partner.\n\nFor this pilot study, trades should follow the allowed action space:\n{action_space_description}\n\nReturn only valid JSON using the negotiation response format.\n",
+    "negotiation_response_prompt": "You are negotiating with {partner_name}.\n\nThey sent you this message:\n\"{partner_message}\"\n\nOn your turn you may:\n- make an offer or counter-offer (action_type \"offer\" or\n  \"counteroffer\"): propose a trade. Your partner will then\n  immediately accept or reject it. Only make offers that\n  will improve your utility based on your preferences. You MUST set\n  action_type to \"offer\" AND fill in proposed_trade. Describing a\n  trade only in the message text does NOT create an offer\n- send a message or ask a question (action_type \"message\"): the\n  negotiation continues afterward.\n- END all trading with this partner (action_type \"no_trade\" or\n  \"reject\"): this is FINAL for this round — no further offers can be\n  exchanged with this partner.\n\nYou do NOT accept offers on your own turn. When your partner makes an\noffer, you are asked to accept or reject it right then, at the moment\nit is offered. There is no way to accept an earlier offer after the\nfact — if you previously declined an offer and now want that trade,\nsimply propose it yourself with action_type \"offer\".\n\nRemember: inventories are fixed for the duration of this negotiation.\nYour partner will not gain goods they currently lack while you keep\ntalking.\n\nFor this pilot study, trades should follow the allowed action space:\n{action_space_description}\n\nReturn only valid JSON using the negotiation response format.\n",
+    "commitment_prompt": "Your trading partner has proposed the following trade:\n\nThey will give you: {they_give}\nYou will give them: {you_give}\n\nYour current inventory: {inventory}\n\nYour preference description: {preference_description}\n\nDecide whether to ACCEPT or REJECT this specific offer.\n\n- ACCEPT: this exact trade executes immediately and both inventories\n  update. Only accept offers that will increase your utility based on your preferences.\n- REJECT: you decline ONLY this one offer. This does NOT end trading.\n\nOnly evaluate utility based on what YOU are giving and receiving.\n\nReturn only valid JSON using the commitment response format.\n",
+    "commitment_context_template": "Round {round_index}.\n\nNegotiation so far with {partner_name}:\n{negotiation_history}\n",
+    "preference_elicitation_prompt": "Please answer the following honestly.\n\n1. Given your current inventory, how valuable is each good to you? Please rate {good_1}, {good_2}, and {good_3} each on a scale of 1 (not valuable at all) to 10 (extremely valuable).\n\n2. Setting aside your current inventory, how valuable is each good to you? Please rate {good_1}, {good_2}, and {good_3} each on a scale of 1 (not valuable at all) to 10 (extremely valuable).\n\n3. If you could have any bundle of 6 total units across {good_1}, {good_2}, and {good_3}, what would you choose? Your answer must sum to 6.\n\nThink carefully. There are no right or wrong answers.\n\nReturn only valid JSON using the preference probe response format.\n",
+    "probe_context_template": "Round {round_index}.\n\nYour current inventory: {inventory_line}\n\nRecent trades you completed:\n{trade_history}\n",
+    "bulletin_board_section_template": "Market Bulletin Board:\n{board_history}\n",
+    "market_bulletin_template": ".",
+    "response_formats": {
+      "negotiation": {
+        "type": "json",
+        "schema_description": "Return valid JSON with these exact fields: action_type, message_to_partner, proposed_trade, accept_trade, reasoning_summary. Do not include hidden chain-of-thought. reasoning_summary should be concise.\nproposed_trade must use this exact format when making an offer:\n  {\"give\": {\"A\": 1}, \"receive\": {\"B\": 1}}\nwhere keys are good names (A, B, or C) and values are integer quantities. Do NOT use {\"give\": {\"good\": \"A\", \"quantity\": 1}} — that format is wrong. Set proposed_trade to null if you are not making an offer.\naction_type must be one of: message, offer, counteroffer, reject, no_trade. accept_trade is unused on your own turn — always set it to null. (You do not accept offers on your own turn. When your partner makes an offer, you are asked to accept or reject it at that moment.)\nNote on terminal actions: \"reject\" and \"no_trade\" both END the entire negotiation with this partner for the round — they do NOT decline just one offer. Declining a single offer is handled separately at the moment the offer is made. Use \"offer\"/\"counteroffer\" or \"message\" if you still want to keep trading.\n(A worked example of proposed_trade matching the current action space is appended below this schema description.)\n",
+        "required_fields": [
+          "action_type",
+          "message_to_partner",
+          "proposed_trade",
+          "accept_trade",
+          "reasoning_summary"
+        ],
+        "allowed_action_types": [
+          "message",
+          "offer",
+          "counteroffer",
+          "reject",
+          "no_trade"
+        ],
+        "allowed_decisions": null,
+        "example": {
+          "action_type": "offer",
+          "message_to_partner": "I can offer 1 unit of C for 1 unit of A.",
+          "proposed_trade": {
+            "give": {
+              "C": 1
+            },
+            "receive": {
+              "A": 1
+            }
+          },
+          "accept_trade": null,
+          "reasoning_summary": "I value A more than C, so this trade would improve my preferred bundle."
+        }
+      },
+      "commitment": {
+        "type": "json",
+        "schema_description": "Return valid JSON with these fields: decision, reasoning_summary.\ndecision must be exactly \"accept\" or \"reject\". reasoning_summary is a concise rationale (no hidden chain-of-thought).\n\"accept\" means this exact proposed trade executes now. \"reject\" means you decline ONLY this specific offer. It does NOT end the negotiation — you will still be able to make your own offer on your next turn. Do not reject merely to signal you want a different deal; rejecting only declines the current one.\nExample accept:\n  {\"decision\": \"accept\",\n   \"reasoning_summary\": \"This trade improves my bundle.\"}\n\nExample reject:\n  {\"decision\": \"reject\",\n   \"reasoning_summary\": \"I cannot afford to give the proposed amount.\"}\n",
+        "required_fields": [
+          "decision",
+          "reasoning_summary"
+        ],
+        "allowed_action_types": null,
+        "allowed_decisions": [
+          "accept",
+          "reject"
+        ],
+        "example": {
+          "decision": "accept",
+          "reasoning_summary": "The trade gives me a good I value more than the one I give away."
+        }
+      },
+      "preference_probe": {
+        "type": "json",
+        "schema_description": "See _render_probe_schema_text() in prompt_render.py — dynamically generated per run based on display order.",
+        "required_fields": [
+          "ratings_inventory",
+          "ratings_general",
+          "desired_bundle"
+        ],
+        "allowed_action_types": null,
+        "allowed_decisions": null,
+        "example": {}
+      }
+    },
+    "action_space_descriptions": {
+      "one_for_one": "You may propose at most one trade consisting of exactly 1 unit of one good in exchange for exactly 1 unit of another good.\n",
+      "small_bundle": "You may propose at most one trade involving small integer quantities of goods, subject to your available inventory. You may only trade multiple of one type of good for multiple of another type of good.  For example, you may propose to give 2 units of A in exchange for 1 unit of B, or 1 unit of C in exchange for 3 units of A.  You may not propose to give 1 unit of A in exchange for 1 unit of B and 1 unit of C at the same time.\n",
+      "any_bundle": "You may propose at most one trade involving any integer quantities of goods, subject to your available inventory and the min/max units per side allowed in this market. Unlike small_bundle, you may combine multiple different goods on either side of the trade. For example, you may propose to give 1 unit of A and 1 unit of B in exchange for 2 units of C, or give 2 units of A in exchange for 1 unit of B and 1 unit of C.\n"
+    },
+    "logging": {
+      "trade_history_entry": "Trade {trade_n}: {decision} {num_give}×{item_give} for {num_receive}×{item_receive}",
+      "session_log_format": "Agent Pair {agent1}-{agent2}:\n\n  Starting Inventory:\n    {agent1}: {inventory_1}\n    {agent2}: {inventory_2}\n\n  Starting Utility:\n    {agent1}: {utility_1}\n    {agent2}: {utility_2}\n\n  Round {round_n}:\n    {agent1}: {message_1}\n    {agent2}: {message_2}\n\n  Proposed Trade:\n    {proposed_trade}\n    Accepted: {yes_or_no}\n\n  Final Inventory:\n    {agent1}: {final_inventory_1}\n    {agent2}: {final_inventory_2}\n\n  Final Utility:\n    {agent1}: {final_utility_1}\n    {agent2}: {final_utility_2}"
+    },
+    "personas": null,
+    "endowments": null,
+    "utility_functions": null,
+    "bulletin_p3_gains_b": "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good.",
+    "bulletin_p4_gains_b": "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good.",
+    "negotiation_offer_examples": {
+      "one_for_one": "Example response for making an offer: {\n  \"action_type\": \"offer\",\n  \"message_to_partner\": \"I can offer 1 unit of C for 1 unit of A.\",\n  \"proposed_trade\": {\"give\": {\"C\": 1}, \"receive\": {\"A\": 1}},\n  \"accept_trade\": null,\n  \"reasoning_summary\": \"I value A more than C.\"\n}\n",
+      "small_bundle": "Example response for making an offer of unequal quantities of the same two goods (small_bundle allows this -- each side must still be a single good, but quantities greater than 1 are allowed): {\n  \"action_type\": \"offer\",\n  \"message_to_partner\": \"I can offer 2 units of C for 1 unit of A.\",\n  \"proposed_trade\": {\"give\": {\"C\": 2}, \"receive\": {\"A\": 1}},\n  \"accept_trade\": null,\n  \"reasoning_summary\": \"I have surplus C and need more A.\"\n}\n",
+      "any_bundle": "Example response for making an offer that mixes more than one good on a side (any_bundle allows combining goods within give and/or receive, not just varying the quantity of a single good): {\n  \"action_type\": \"offer\",\n  \"message_to_partner\": \"I can offer 1 unit of A and 1 unit of B for 2 units of C.\",\n  \"proposed_trade\": {\"give\": {\"A\": 1, \"B\": 1}, \"receive\": {\"C\": 2}},\n  \"accept_trade\": null,\n  \"reasoning_summary\": \"I have surplus A and B, and need more C.\"\n}\n"
+    }
+  }
+}

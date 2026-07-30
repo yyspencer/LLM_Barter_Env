@@ -107,6 +107,26 @@ def _shuffle_player_order(
     return shuffled
 
 
+def resolve_total_rounds(
+    num_players: int,
+    num_rounds: Optional[int] = None,
+    round_multiplier: int = 1,
+) -> int:
+    """
+    Resolve the exact total round count generate_round_robin_disjoint_pairs
+    would use, without generating the schedule itself. Mirrors the sizing
+    rule used there: an explicit num_rounds wins; otherwise it's
+    round_multiplier full cycles.
+    """
+    if round_multiplier < 1:
+        raise ValueError("round_multiplier must be >= 1.")
+    if num_rounds is not None:
+        if num_rounds < 1:
+            raise ValueError("num_rounds must be >= 1 when provided.")
+        return num_rounds
+    return full_cycle_length(num_players) * round_multiplier
+
+
 def generate_round_robin_disjoint_pairs(
     player_ids: Sequence[PlayerId],
     num_rounds: Optional[int] = None,

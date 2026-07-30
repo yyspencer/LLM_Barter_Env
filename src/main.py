@@ -34,32 +34,27 @@ from pairing import (
 )
  
  
-def resolve_num_rounds(cfg) -> int | None:
-    """
-    Determine the exact number of rounds to generate.
- 
-    If max_rounds_override is set in experiment.yaml, use it.
-    Otherwise return None, which tells pairing.py to use:
-        round_multiplier * full_cycle_length(num_players)
-    """
-    override = cfg.experiment.rounds.max_rounds_override
-    if override is not None:
-        return int(override)
-    return None
- 
- 
 def cmd_dry_run(cfg) -> None:
     """Print config summary and pairing schedule. No API calls."""
     print_config_summary(cfg)
- 
+
+    from runner import (
+        base_total_rounds,
+        washout_probe_round_indices,
+        washout_round_indices,
+    )
+
     player_ids = [player.id for player in cfg.players.players]
     num_players = len(player_ids)
     cycle_len = full_cycle_length(num_players)
- 
-    exact_num_rounds = resolve_num_rounds(cfg)
+
+    base_rounds = base_total_rounds(cfg.experiment, num_players)
+    washout_rounds = washout_round_indices(cfg.experiment, num_players)
+    washout_probes = washout_probe_round_indices(cfg.experiment, num_players)
+    exact_num_rounds = base_rounds + len(washout_rounds)
     round_multiplier = cfg.experiment.rounds.round_multiplier
     seed = cfg.experiment.experiment.seed
- 
+
     schedule = generate_round_robin_disjoint_pairs(
         player_ids=player_ids,
         num_rounds=exact_num_rounds,
@@ -67,24 +62,31 @@ def cmd_dry_run(cfg) -> None:
         reshuffle_between_cycles=cfg.experiment.pairing.reshuffle_between_runs,
         seed=seed,
     )
- 
+
     total_rounds = len(schedule)
     total_pair_interactions = sum(len(round_pairs) for round_pairs in schedule)
- 
+
     print("\n" + "=" * 60)
     print("PAIRING SCHEDULE")
     print("=" * 60)
     print(f"Players: {num_players}")
     print(f"Full cycle length: {cycle_len} rounds")
+    print(f"Base rounds (before washout): {base_rounds}")
+    if washout_rounds:
+        print(
+            f"Washout rounds: {sorted(washout_rounds)} "
+            f"(broadcast disabled: {cfg.experiment.washout.disable_broadcast}, "
+            f"probes after rounds: {sorted(washout_probes)})"
+        )
     print(f"Generated rounds: {total_rounds}")
     print(f"Total pair interactions: {total_pair_interactions}")
     print(f"Pairing mode: {cfg.experiment.pairing.mode}")
     print(f"Execution mode: {cfg.experiment.mechanism.execution_mode}")
     print(f"Synchronization: {cfg.experiment.mechanism.synchronization}")
- 
+
     has_dupes = has_duplicate_pairs_within_cycle(schedule, num_players)
     print(f"Duplicate pairs within cycle: {'yes' if has_dupes else 'no'}")
- 
+
     print("-" * 60)
     print(format_schedule(schedule))
     print("=" * 60)

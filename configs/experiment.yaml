@@ -23,6 +23,22 @@ rounds:
   round_multiplier: 2
   max_rounds_override: null
 
+# Washout: extra rounds appended after the normal schedule above, to see
+# whether the broadcast manipulation's effects on stated/revealed
+# preferences persist once the bulletin board goes away. With the current
+# rounds config (base = round_multiplier * (num_players - 1) = 2 * 5 = 10),
+# num_rounds: 4 appends rounds 11-14.
+washout:
+  enabled: true
+  num_rounds: 4
+  # If true, the market bulletin board is not shown to (or added to) during
+  # these washout rounds, even if mechanism.broadcast_completed_trades is on.
+  disable_broadcast: true
+  # 1-indexed positions within the washout block to probe after. [2, 4]
+  # means "after washout round 2" and "after the final washout round" — with
+  # the current 10-round base schedule that's round 12 and round 14.
+  probe_after_washout_rounds: [2, 4]
+
 pairing:
   # Each round creates disjoint pairs. Since each player appears in at most one
   # pair per round, all pairs in that round can be negotiated in parallel.
@@ -53,7 +69,7 @@ mechanism:
   broadcast_completed_trades: false
   # Only broadcast trades involving these players. Null = broadcast all trades.
   # Example: [player_1, player_5] = only trades where agent 1 or 5 participates.
-  broadcast_filter_players: [player_3,player_4]
+  broadcast_filter_players: [player_1,player_2,player_3,player_4]
   # Optional: pick a different bulletin template depending on who's trading
   # and what they're gaining. Each rule has:
   #   player:   the agent ID to check
@@ -77,7 +93,19 @@ mechanism:
        template: bulletin_p3_gains_a
      - player: player_4
        gains: A
-       template: bulletin_p4_gains_a    
+       template: bulletin_p4_gains_a
+     - player: player_1
+       gains: C
+       template: bulletin_p1_gains_c
+     - player: player_2
+       gains: C
+       template: bulletin_p2_gains_c
+     - player: player_3
+       gains: C
+       template: bulletin_p3_gains_c
+     - player: player_4
+       gains: C
+       template: bulletin_p4_gains_c            
   mediator_enabled: false
 
 trade_rules:

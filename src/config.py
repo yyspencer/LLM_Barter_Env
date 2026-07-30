@@ -120,6 +120,44 @@ class RoundsConfig(BaseModel):
     max_rounds_override: Optional[int] = None
 
 
+class WashoutConfig(BaseModel):
+    """
+    Optional washout block: extra rounds appended after the normal schedule,
+    used to see whether an experimental manipulation's effects persist or
+    fade once the manipulation itself is removed.
+
+    When enabled, ``num_rounds`` extra rounds are appended to the normal
+    round-robin schedule (same pairing mechanism, just more of it). If
+    ``disable_broadcast`` is true, the market bulletin board — negotiation,
+    commitment, and probe prompts alike, plus new trades during these
+    rounds — stops being shown/recorded for the washout rounds only, even
+    when mechanism.broadcast_completed_trades is on for the rest of the run.
+    """
+    enabled: bool = False
+    num_rounds: int = Field(default=4, ge=0)
+    disable_broadcast: bool = True
+
+    # Round positions *within the washout block* (1-indexed) after which to
+    # run a preference probe. E.g. with num_rounds=4, [2, 4] means "after
+    # washout round 2" and "after the final washout round" — expressed
+    # relative to the washout block so it stays correct if the base
+    # schedule length changes, rather than as hardcoded absolute round
+    # numbers.
+    probe_after_washout_rounds: List[int] = Field(default_factory=lambda: [2, 4])
+
+    @model_validator(mode="after")
+    def validate_probe_offsets(self) -> "WashoutConfig":
+        if self.enabled:
+            for offset in self.probe_after_washout_rounds:
+                if offset < 1 or offset > self.num_rounds:
+                    raise ValueError(
+                        "washout.probe_after_washout_rounds entries must be "
+                        f"between 1 and washout.num_rounds ({self.num_rounds}); "
+                        f"got {offset}."
+                    )
+        return self
+
+
 class PairingConfig(BaseModel):
     mode: str = "round_robin_disjoint_pairs"
     allow_repeat_pairings_within_cycle: bool = False
@@ -284,6 +322,7 @@ class ExperimentConfig(BaseModel):
     experiment: ExperimentMetaConfig
     market: MarketConfig
     rounds: RoundsConfig
+    washout: WashoutConfig = Field(default_factory=WashoutConfig)
     pairing: PairingConfig
     mechanism: MechanismConfig
     trade_rules: TradeRulesConfig
