@@ -565,7 +565,7 @@ def gpt_preference_probe_contextual(
     trade_history: Optional[List[Dict[str, Any]]] = None,
     board_history: Optional[List[str]] = None,
     broadcast: bool = False,
-) -> Tuple[Dict[str, Any], str]:
+) -> Tuple[Optional[Dict[str, Any]], str]:
     """
     Like gpt_preference_probe but threads the player's prior probe responses
     into the conversation, so the model sees how it answered in all previous
@@ -625,11 +625,7 @@ def gpt_preference_probe_contextual(
         parsed = _validate_probe_response(parsed)
     except (ValueError, KeyError) as exc:
         print(f"  [openai_agent] Parse error for {player.id} contextual probe: {exc}")
-        parsed = {
-            "ratings_inventory": {g: 5 for g in display_order},
-            "ratings_general": {g: 5 for g in display_order},
-            "desired_bundle": {g: 2 for g in display_order},
-        }
+        parsed = None
 
     logger.log_model_output(
         player_id=player.id,

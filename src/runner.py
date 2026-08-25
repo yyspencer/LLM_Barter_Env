@@ -1852,6 +1852,12 @@ def run_probe_only_experiment(
                     display_order=display_order,
                 )
 
+            if parsed is None:
+                logger.append_transcript(
+                    f"[PROBE probe_{i}] {player.display_name}: SKIPPED (parse error)\n"
+                )
+                continue
+
             # Log and write to transcript (same path for both modes).
             current_inventory = dict(inventories[player.id])
             predicted_marginal_utility = predicted_marginal_utilities(
