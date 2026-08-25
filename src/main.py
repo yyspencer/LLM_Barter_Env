@@ -6,16 +6,20 @@ Entry point for the LLM barter experiment.
 Modes:
   --dry-run      Validate configs and print the pairing schedule. No API calls.
   --mock-run     Run the full experiment with deterministic mock agents. No API calls.
-  --run          Run the full experiment with real LLM providers.
+  --run          Run the full experiment with real GPT API calls.
+  --run-gemini   Run the full experiment with real Gemini API calls.
+  --run-claude   Run the full experiment with real Claude API calls.
   --random       Run a no-intelligence baseline where agents trade randomly. No API calls.
   --probe-only   Run only preference probes (no trading) to measure LLM drift.
- 
+
 Usage:
   python src/main.py --dry-run
   python src/main.py --mock-run
   python src/main.py --random
   python src/main.py --probe-only --probe-only-count 10
   python src/main.py --run
+  python src/main.py --run-gemini
+  python src/main.py --run-claude
 """
  
 from __future__ import annotations
@@ -102,8 +106,20 @@ def cmd_mock_run(cfg) -> None:
  
 def cmd_run(cfg) -> None:
     """Run with real GPT-5.4 API calls."""
-    from runner import run_gpt_experiment
-    run_gpt_experiment(cfg)
+    from runner import run_llm_experiment
+    run_llm_experiment(cfg, "gpt")
+
+
+def cmd_run_gemini(cfg) -> None:
+    """Run with real Gemini API calls."""
+    from runner import run_llm_experiment
+    run_llm_experiment(cfg, "gemini")
+
+
+def cmd_run_claude(cfg) -> None:
+    """Run with real Claude API calls."""
+    from runner import run_llm_experiment
+    run_llm_experiment(cfg, "claude")
 
 
 def cmd_random_run(cfg) -> None:
@@ -126,7 +142,9 @@ def main() -> None:
 Modes:
   --dry-run      Validate configs and preview pairing schedule (no API calls).
   --mock-run     Run full experiment with deterministic mock agents (no API calls).
-  --run          Run full experiment with real LLM providers.
+  --run          Run full experiment with real GPT API calls.
+  --run-gemini   Run full experiment with real Gemini API calls.
+  --run-claude   Run full experiment with real Claude API calls.
   --random       Random-baseline run for comparing against intelligent agents (no API calls).
   --probe-only   Run only preference probes (no trading) to measure LLM drift.
         """,
@@ -148,6 +166,20 @@ Modes:
         "--run",
         action="store_true",
         help="Run full experiment with real LLM providers.",
+    )
+    mode_group.add_argument(
+        "--run-gemini",
+        action="store_true",
+        help=("Run full experiment with real Gemini API calls. Requires "
+              "the API key env var named in models.yaml's gemini entry "
+              "(e.g. GEMINI_API_KEY) and model_id 'gemini' enabled there."),
+    )
+    mode_group.add_argument(
+        "--run-claude",
+        action="store_true",
+        help=("Run full experiment with real Claude API calls. Requires "
+              "the API key env var named in models.yaml's claude entry "
+              "(e.g. ANTHROPIC_API_KEY) and model_id 'claude' enabled there."),
     )
     mode_group.add_argument(
         "--random",
@@ -242,8 +274,11 @@ Modes:
         parser.error(f"--num-runs must be >= 1 (got {args.num_runs})")
 
     # API keys are needed for any run that actually calls an LLM.
-    # That's --run and --probe-only. Everything else is offline.
-    needs_keys_by_default = args.run or args.probe_only
+    # That's --run, --run-gemini, --run-claude, and --probe-only. Everything
+    # else is offline.
+    needs_keys_by_default = (
+        args.run or args.run_gemini or args.run_claude or args.probe_only
+    )
     require_keys = needs_keys_by_default and not args.skip_api_key_check
 
     cfg = load_config(
@@ -305,6 +340,10 @@ Modes:
                 cmd_mock_run(cfg)
             elif args.run:
                 cmd_run(cfg)
+            elif args.run_gemini:
+                cmd_run_gemini(cfg)
+            elif args.run_claude:
+                cmd_run_claude(cfg)
             elif args.random:
                 cmd_random_run(cfg)
             elif args.probe_only:

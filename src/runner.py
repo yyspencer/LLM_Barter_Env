@@ -14,15 +14,17 @@ This module owns the full experiment loop:
       log everything
  
 Entry points:
-  run_mock_experiment(cfg)   -- full pipeline with deterministic mock agents
-  run_gpt_experiment(cfg)    -- full pipeline with real GPT-5.4 API calls
+  run_mock_experiment(cfg)          -- full pipeline with deterministic mock agents
+  run_llm_experiment(cfg, provider) -- full pipeline with real API calls
+                                        (provider: "gpt" | "gemini" | "claude")
  
 Both modes share the same round/probe/logging infrastructure. The only
 difference is the agent callables passed into the shared loop.
 """
  
 from __future__ import annotations
- 
+
+import importlib
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
  
 from config import LoadedConfig
@@ -1267,42 +1269,88 @@ def run_mock_experiment(cfg: LoadedConfig) -> RunLogger:
  
  
 # ---------------------------------------------------------------------------
-# GPT experiment entry point
+# LLM experiment entry point (GPT / Gemini / Claude)
 # ---------------------------------------------------------------------------
- 
-def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
-    """
-    Run the full experiment with real GPT-5.4 API calls.
- 
-    Requires:
-      - OPENAI_API_KEY in .env (or environment)
-      - prompts.yaml loaded (require_prompts=True, the default)
-      - model_id 'gpt' present and enabled in models.yaml
-    """
+
+def _make_openai_client(api_key: str):
     from openai import OpenAI
-    from openai_agent import (
-        gpt_commitment_decision,
-        gpt_negotiation_action,
-        gpt_preference_probe,
-    )
- 
+    return OpenAI(api_key=api_key)
+
+
+def _make_gemini_client(api_key: str):
+    from google import genai
+    return genai.Client(api_key=api_key)
+
+
+def _make_claude_client(api_key: str):
+    from anthropic import Anthropic
+    return Anthropic(api_key=api_key)
+
+
+# Each provider agent module exports identically-named functions
+# (gpt_negotiation_action, gpt_commitment_decision, gpt_preference_probe) so
+# they are interchangeable here -- only the client and model_spec differ.
+_PROVIDER_REGISTRY: Dict[str, Dict[str, Any]] = {
+    "gpt": {
+        "label": "GPT",
+        "agent_module": "openai_agent",
+        "client_factory": _make_openai_client,
+    },
+    "gemini": {
+        "label": "Gemini",
+        "agent_module": "gemini_agent",
+        "client_factory": _make_gemini_client,
+    },
+    "claude": {
+        "label": "Claude",
+        "agent_module": "claude_agent",
+        "client_factory": _make_claude_client,
+    },
+}
+
+
+def run_llm_experiment(cfg: LoadedConfig, provider_id: str) -> RunLogger:
+    """
+    Run the full experiment with real API calls against the given provider.
+
+    provider_id must be a key in _PROVIDER_REGISTRY ("gpt", "gemini", or
+    "claude") and a matching, enabled model_id in models.yaml.
+
+    Requires:
+      - The env var named in models.yaml's <provider_id>.api_env_var in .env or environment
+      - prompts.yaml loaded (require_prompts=True, the default)
+      - model_id == provider_id present and enabled in models.yaml
+    """
+    if provider_id not in _PROVIDER_REGISTRY:
+        raise ValueError(
+            f"Unknown provider_id={provider_id!r}. "
+            f"Expected one of: {sorted(_PROVIDER_REGISTRY)}"
+        )
+    provider = _PROVIDER_REGISTRY[provider_id]
+    label = provider["label"]
+
+    agent_mod = importlib.import_module(provider["agent_module"])
+    gpt_negotiation_action = agent_mod.gpt_negotiation_action
+    gpt_commitment_decision = agent_mod.gpt_commitment_decision
+    gpt_preference_probe = agent_mod.gpt_preference_probe
+
     exp_cfg = cfg.experiment
     goods   = exp_cfg.market.goods
     prompts = cfg.prompts
- 
+
     if prompts is None:
-        raise ValueError("prompts.yaml must be loaded for a GPT run.")
- 
-    gpt_spec = cfg.models.get_model("gpt")
- 
-    if not gpt_spec.api_key:
+        raise ValueError(f"prompts.yaml must be loaded for a {label} run.")
+
+    model_spec = cfg.models.get_model(provider_id)
+
+    if not model_spec.api_key:
         raise ValueError(
-            "OPENAI_API_KEY is not set. "
-            "Add it to your .env file as OPENAI_API_KEY=sk-..."
+            f"{model_spec.api_env_var} is not set. "
+            f"Add it to your .env file as {model_spec.api_env_var}=..."
         )
- 
-    client = OpenAI(api_key=gpt_spec.api_key)
- 
+
+    client = provider["client_factory"](model_spec.api_key)
+
     logger = RunLogger.create(
         output_dir=exp_cfg.logging.output_dir,
         experiment_name=exp_cfg.experiment.name,
@@ -1310,8 +1358,8 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
     )
     logger.log_event("experiment_started", {
         "experiment_name": exp_cfg.experiment.name,
-        "mode": "gpt",
-        "model": gpt_spec.model,
+        "mode": provider_id,
+        "model": model_spec.model,
         "num_players": exp_cfg.market.num_players,
         "goods": goods,
         "seed": exp_cfg.experiment.seed,
@@ -1325,8 +1373,8 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
         ],
         loaded_config=cfg,
     )
- 
-    # Live inventory mirror — the GPT agent needs to see current inventories
+
+    # Live inventory mirror -- the agent needs to see current inventories
     # when building prompts (world state). We sync this after every trade.
     live_inv: Dict[str, Inventory] = {
         p.id: dict(p.inventory) for p in cfg.players.players
@@ -1358,7 +1406,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             partner=partner,
             negotiation_history=negotiation_history,
             turn_index=turn_index,
-            model_spec=gpt_spec,
+            model_spec=model_spec,
             client=client,
             logger=logger,
             pair_id=pair_id,
@@ -1378,7 +1426,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             prompts=prompts,
             goods=goods,
             proposed_trade=proposed_trade,
-            model_spec=gpt_spec,
+            model_spec=model_spec,
             client=client,
             logger=logger,
             round_index=round_index,
@@ -1389,15 +1437,19 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             board_history=bulletin_board if round_broadcast else None,
             broadcast=round_broadcast,
         )
- 
+
     def probe_fn(player, round_index, trade_history=None,
                  bulletin_board=None, broadcast=False, display_order=None):
         # Patch live inventory so the probe context shows the up-to-date state.
+        # NOTE: the bulletin_board/broadcast params here shadow the outer
+        # closure variables of the same name -- run_preference_probes() has
+        # already gated bulletin_board to None when not broadcasting, so it
+        # can be forwarded as-is.
         player.inventory = live_inv[player.id]
         return gpt_preference_probe(
             player=player,
             prompts=prompts,
-            model_spec=gpt_spec,
+            model_spec=model_spec,
             client=client,
             logger=logger,
             round_index=round_index,
@@ -1410,7 +1462,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
 
     def shadow_commitment_fn(player, proposed_trade, round_index, shadow_id, display_order=None):
         # Same prompt shape as a real commitment decision, generic
-        # fictitious partner, tagged "shadow_commitment" in the logs so it's
+        # fictitious partner, tagged "shadow_commitment" in the logs so it is
         # never conflated with a real commitment decision.
         player.inventory = live_inv[player.id]
         round_broadcast = _round_broadcast(round_index)
@@ -1419,7 +1471,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
             prompts=prompts,
             goods=goods,
             proposed_trade=proposed_trade,
-            model_spec=gpt_spec,
+            model_spec=model_spec,
             client=client,
             logger=logger,
             round_index=round_index,
@@ -1435,20 +1487,20 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
 
     # Wrap execute_trade to keep live_inv in sync with the loop's inventories
     original_execute = execute_trade
- 
+
     def synced_execute(proposer_id, responder_id, proposed_trade, inventories):
         original_execute(proposer_id, responder_id, proposed_trade, inventories)
         live_inv[proposer_id]  = dict(inventories[proposer_id])
         live_inv[responder_id] = dict(inventories[responder_id])
- 
+
     import runner as _self
     _self.execute_trade = synced_execute
- 
+
     try:
         result = _run_experiment_loop(
             cfg=cfg,
             logger=logger,
-            mode="gpt",
+            mode=provider_id,
             negotiation_fn=negotiation_fn,
             commitment_fn=commitment_fn,
             probe_fn=probe_fn,
@@ -1458,7 +1510,7 @@ def run_gpt_experiment(cfg: LoadedConfig) -> RunLogger:
     finally:
         _self.execute_trade = original_execute
 
-    print(f"\nGPT run complete. Output written to: {logger.run_dir}")
+    print(f"\n{label} run complete. Output written to: {logger.run_dir}")
     return result
 
 # ---------------------------------------------------------------------------

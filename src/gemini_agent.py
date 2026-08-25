@@ -1,278 +1,201 @@
 """
-openai_agent.py
- 
-OpenAI provider wrapper for the LLM barter experiment.
- 
-Handles:
-  - Calling the OpenAI chat completions API (GPT-5.4)
+gemini_agent.py
+
+Google Gemini provider wrapper for the LLM barter experiment.
+
+Same responsibilities as openai_agent.py, but talks to the Gemini API
+(google-genai SDK, Gemini 3.1 Pro) instead of OpenAI's:
+  - Calling the Gemini generateContent API
   - JSON parsing with best-effort repair for common model output issues
+    (reuses openai_agent's parser/validators — that logic is provider-agnostic,
+    so fixes made there, e.g. how malformed probe fields are handled,
+    automatically apply here too)
   - Retry with exponential backoff on transient API errors
   - Logging raw outputs via RunLogger
- 
-Public interface (mirrors mock_agent.py signatures):
-  gpt_negotiation_action(...)   -> dict
-  gpt_commitment_decision(...)  -> dict
-  gpt_preference_probe(...)     -> dict
- 
-These are called by runner.py exactly like the mock equivalents, so
-swapping providers later only requires a new agent module.
+
+Public interface (mirrors mock_agent.py / openai_agent.py signatures):
+  gpt_negotiation_action(...)            -> dict
+  gpt_commitment_decision(...)           -> dict
+  gpt_preference_probe(...)              -> dict
+  gpt_preference_probe_contextual(...)   -> (dict, str)
+
+These are called by runner.py exactly like the OpenAI/mock equivalents, so
+swapping providers only requires importing this module's functions and
+passing a genai.Client instead of openai_agent's and an OpenAI client.
 """
- 
+
 from __future__ import annotations
- 
-import json
-import re
+
 import time
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
- 
-from openai import OpenAI, APITimeoutError, APIConnectionError, RateLimitError
- 
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
+
 from logger import RunLogger
+from openai_agent import (
+    _validate_commitment_response,
+    _validate_negotiation_response,
+    _validate_probe_response,
+    parse_json_response,
+)
 from prompt_render import (
     build_commitment_messages,
     build_negotiation_first_messages,
     build_negotiation_response_messages,
     build_preference_probe_messages,
 )
- 
- 
-# ---------------------------------------------------------------------------
-# JSON repair helpers
-# ---------------------------------------------------------------------------
- 
-def _strip_markdown_fences(text: str) -> str:
-    """Remove ```json ... ``` or ``` ... ``` fences that models sometimes add."""
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
-    return text.strip()
- 
- 
-def _extract_first_json_object(text: str) -> str:
-    """
-    Pull the first {...} block out of a string that has surrounding prose.
-    Returns the substring if found, otherwise returns text unchanged.
-    """
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        return match.group(0)
-    return text
- 
- 
-def _strip_trailing_commas(text: str) -> str:
-    """
-    Remove a trailing comma before a closing `}` or `]` — a common LLM
-    artifact (writing a dict/list literal instead of strict JSON) that
-    plain json.loads rejects outright.
-    """
-    return re.sub(r",\s*([}\]])", r"\1", text)
+
+DEFAULT_MODEL = "gemini-3.1-pro-preview"
 
 
-def _coerce_quantities_to_int(obj: Any) -> Any:
-    """
-    Recursively convert float quantities that are whole numbers (e.g. 1.0 → 1)
-    to int, since the trade validator requires int quantities.
-    """
-    if isinstance(obj, dict):
-        return {k: _coerce_quantities_to_int(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_coerce_quantities_to_int(v) for v in obj]
-    if isinstance(obj, float) and obj.is_integer():
-        return int(obj)
-    return obj
- 
- 
-def parse_json_response(raw: str) -> Dict[str, Any]:
-    """
-    Parse a model's raw text output into a dict.
- 
-    Repair sequence:
-      1. Strip markdown fences
-      2. Try direct parse
-      3. Extract first {...} block and try again
-      4. Strip trailing commas and try a third time
-      5. Raise ValueError if still unparseable
-    """
-    cleaned = _strip_markdown_fences(raw)
-
-    try:
-        result = json.loads(cleaned)
-        return _coerce_quantities_to_int(result)
-    except json.JSONDecodeError:
-        pass
-
-    extracted = _extract_first_json_object(cleaned)
-    try:
-        result = json.loads(extracted)
-        return _coerce_quantities_to_int(result)
-    except json.JSONDecodeError:
-        pass
-
-    repaired = _strip_trailing_commas(extracted)
-    try:
-        result = json.loads(repaired)
-        return _coerce_quantities_to_int(result)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Could not parse JSON from model output.\n"
-            f"Raw output (first 500 chars): {raw[:500]}\n"
-            f"Error: {exc}"
-        ) from exc
- 
- 
 # ---------------------------------------------------------------------------
 # API call with retry
 # ---------------------------------------------------------------------------
- 
-_RETRYABLE = (APITimeoutError, APIConnectionError, RateLimitError)
+
+_RETRYABLE_CODES = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 3
 _BASE_BACKOFF = 2.0   # seconds; doubles each retry
- 
- 
-def _call_openai(
-    client: OpenAI,
+
+# Gemini 3.1 Pro is a reasoning model: its internal "thinking" tokens are
+# deducted from the same max_output_tokens budget as the visible answer. A
+# tight budget (e.g. max_tokens: 400 in models.yaml, sized for a plain
+# non-reasoning completion) gets entirely consumed by thinking, leaving the
+# model to return truncated/empty text (finish_reason=MAX_TOKENS). We cap
+# thinking at a fixed budget and add it on top, so a caller's max_tokens
+# continues to mean "budget for the visible answer" as it does for OpenAI.
+_THINKING_BUDGET = 1024
+
+
+def _to_gemini_contents(
+    messages: List[Dict[str, str]],
+) -> Tuple[Optional[str], List[Dict[str, Any]]]:
+    """
+    Translate this project's OpenAI-shaped message list
+    ([{"role": "system"/"user"/"assistant", "content": str}, ...]) into
+    Gemini's shape: a system_instruction string plus a `contents` list
+    using Gemini's role names ("user" / "model").
+    """
+    system_instruction: Optional[str] = None
+    contents: List[Dict[str, Any]] = []
+
+    for msg in messages:
+        role = msg["role"]
+        text = msg["content"]
+        if role == "system":
+            system_instruction = (
+                text if system_instruction is None else f"{system_instruction}\n\n{text}"
+            )
+            continue
+        gemini_role = "model" if role == "assistant" else "user"
+        contents.append({"role": gemini_role, "parts": [{"text": text}]})
+
+    return system_instruction, contents
+
+
+def _call_gemini(
+    client: genai.Client,
     messages: List[Dict[str, str]],
     model: str,
     temperature: float,
-    max_completion_tokens: int,
+    max_output_tokens: int,
     timeout: float,
-    response_format={"type": "json_object"},
+    response_schema: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Call the OpenAI chat completions endpoint with retry on transient errors.
- 
-    Returns the raw text content of the first choice.
+    Call the Gemini generateContent endpoint with retry on transient errors.
+
+    Returns the raw text content of the response.
     Raises RuntimeError if all retries are exhausted.
     """
+    system_instruction, contents = _to_gemini_contents(messages)
+
+    config_kwargs: Dict[str, Any] = {
+        "temperature": temperature,
+        "max_output_tokens": max_output_tokens + _THINKING_BUDGET,
+        "thinking_config": genai_types.ThinkingConfig(
+            thinking_budget=_THINKING_BUDGET,
+            include_thoughts=False,
+        ),
+        "http_options": genai_types.HttpOptions(timeout=int(timeout * 1000)),
+    }
+    if system_instruction is not None:
+        config_kwargs["system_instruction"] = system_instruction
+    if response_schema is not None:
+        config_kwargs["response_mime_type"] = "application/json"
+        config_kwargs["response_schema"] = response_schema
+
+    config = genai_types.GenerateContentConfig(**config_kwargs)
+
     last_exc: Optional[Exception] = None
- 
+
     for attempt in range(_MAX_RETRIES):
         try:
-            response = client.chat.completions.create(
+            response = client.models.generate_content(
                 model=model,
-                messages=messages,          # type: ignore[arg-type]
-                temperature=temperature,
-                max_completion_tokens=max_completion_tokens,
-                timeout=timeout,
-                response_format=response_format,
+                contents=contents,
+                config=config,
             )
-            return response.choices[0].message.content or ""
- 
-        except _RETRYABLE as exc:
-            last_exc = exc
-            wait = _BASE_BACKOFF * (2 ** attempt)
-            print(
-                f"  [openai_agent] Transient error ({type(exc).__name__}), "
-                f"retry {attempt + 1}/{_MAX_RETRIES} in {wait:.0f}s..."
-            )
-            time.sleep(wait)
- 
+            return response.text or ""
+
+        except genai_errors.APIError as exc:
+            if getattr(exc, "code", None) in _RETRYABLE_CODES:
+                last_exc = exc
+                wait = _BASE_BACKOFF * (2 ** attempt)
+                print(
+                    f"  [gemini_agent] Transient error ({exc.code}), "
+                    f"retry {attempt + 1}/{_MAX_RETRIES} in {wait:.0f}s..."
+                )
+                time.sleep(wait)
+                continue
+            # Non-retryable API error (auth, bad request, etc.)
+            raise RuntimeError(f"Gemini API call failed: {exc}") from exc
+
         except Exception as exc:
-            # Non-retryable (auth errors, bad requests, etc.)
-            raise RuntimeError(f"OpenAI API call failed: {exc}") from exc
- 
+            raise RuntimeError(f"Gemini API call failed: {exc}") from exc
+
     raise RuntimeError(
-        f"OpenAI API call failed after {_MAX_RETRIES} retries. "
+        f"Gemini API call failed after {_MAX_RETRIES} retries. "
         f"Last error: {last_exc}"
     )
- 
- 
+
+
 # ---------------------------------------------------------------------------
-# Response validators
+# Structured output schema
 # ---------------------------------------------------------------------------
- 
-def _validate_negotiation_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
+
+def _build_probe_schema(display_order: List[str]) -> Dict[str, Any]:
     """
-    Ensure required fields are present and action_type is a known value.
-    Fill safe defaults for missing optional fields.
+    Build a Gemini structured-output schema (OpenAPI-subset, per Gemini's
+    response_schema) for the probe with goods in the given display order.
     """
-    required = {"action_type", "message_to_partner", "reasoning_summary"}
-    missing = required - set(parsed.keys())
-    if missing:
-        raise ValueError(f"Negotiation response missing fields: {missing}")
- 
-    # "accept" is no longer a valid standalone action (acceptance happens
-    # only at the moment an offer is made). We still recognise it here so a
-    # stray "accept" passes through to the runner, which turns it into a
-    # harmless no-op with an explanatory note, rather than being silently
-    # coerced to "message" and losing that feedback. The runner never
-    # executes a stale prior offer.
-    allowed_types = {"message", "offer", "counteroffer", "accept", "reject", "no_trade"}
-    if parsed.get("action_type") not in allowed_types:
-        # Coerce unknown types to "message" rather than crashing
-        parsed["action_type"] = "message"
- 
-    parsed.setdefault("proposed_trade", None)
-    parsed.setdefault("accept_trade", None)
-    return parsed
- 
- 
-def _validate_commitment_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
-    """Ensure decision is exactly 'accept' or 'reject'."""
-    if "decision" not in parsed:
-        raise ValueError("Commitment response missing 'decision' field.")
+    def _int_object(order: List[str]) -> Dict[str, Any]:
+        return {
+            "type": "OBJECT",
+            "properties": {g: {"type": "INTEGER"} for g in order},
+            "required": list(order),
+        }
 
-    if parsed["decision"] not in {"accept", "reject"}:
-        # Coerce loose answers like "yes"/"no"/"accepted".
-        raw = str(parsed["decision"]).lower()
-        parsed["decision"] = "accept" if "accept" in raw else "reject"
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "ratings_inventory": _int_object(display_order),
+            "ratings_general":   _int_object(display_order),
+            "desired_bundle":    _int_object(display_order),
+        },
+        "required": [
+            "ratings_inventory",
+            "ratings_general",
+            "desired_bundle",
+        ],
+    }
 
-    parsed.setdefault("reasoning_summary", "")
-    return parsed
- 
- 
-def _validate_probe_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
-    """Ensure the three current probe fields are present and well-formed.
 
-    Current probe (see prompts.yaml preference_elicitation_prompt):
-      Q1: ratings_inventory      — value of each good given current inventory
-      Q2: ratings_general     — value of each good setting inventory aside
-      Q3: desired_bundle — preferred bundle summing to 6
-    """
-    required = {"ratings_inventory", "ratings_general", "desired_bundle"}
-    missing = required - set(parsed.keys())
-    if missing:
-        raise ValueError(f"Preference probe response missing fields: {missing}")
-
-    # Both ratings blocks: coerce to int, clamp to [1, 10]
-    for field in ("ratings_inventory", "ratings_general"):
-        for good, val in parsed[field].items():
-            try:
-                parsed[field][good] = max(1, min(10, int(val)))
-            except (TypeError, ValueError):
-                parsed[field][good] = None
-                print(f"  [openai_agent] Warning: {field}[{good}] was not an int, storing null.")
-
-    # Desired bundle: coerce to int, storing null for anything unparseable
-    bundle = parsed["desired_bundle"]
-    for good, val in bundle.items():
-        try:
-            bundle[good] = int(val)
-        except (TypeError, ValueError):
-            bundle[good] = None
-            print(f"  [openai_agent] Warning: desired_bundle[{good}] was not an int, storing null.")
-
-    # Must sum to 6; scale + fix rounding drift if not (only over the valid entries)
-    goods = sorted(g for g, v in bundle.items() if v is not None)
-    total = sum(bundle[g] for g in goods)
-    if goods and total != 6 and total > 0:
-        print(f"  [openai_agent] Warning: desired_bundle sums to {total}, scaling to sum=6.")
-        scaled = {g: round(bundle[g] / total * 6) for g in goods}
-        diff = 6 - sum(scaled.values())
-        if diff != 0:
-            top = max(goods, key=lambda g: bundle[g])
-            scaled[top] = max(0, scaled[top] + diff)
-        for g in goods:
-            bundle[g] = scaled[g]
-
-    return parsed
- 
- 
 # ---------------------------------------------------------------------------
 # Public agent functions
 # ---------------------------------------------------------------------------
- 
+
 def gpt_negotiation_action(
     player: Any,
     prompts: Any,
@@ -282,7 +205,7 @@ def gpt_negotiation_action(
     negotiation_history: Optional[List[Mapping[str, Any]]],
     turn_index: int,
     model_spec: Any,
-    client: OpenAI,
+    client: genai.Client,
     logger: RunLogger,
     pair_id: str,
     display_order: List[str],
@@ -292,8 +215,8 @@ def gpt_negotiation_action(
     broadcast: bool = False,
 ) -> Dict[str, Any]:
     """
-    Call GPT for one negotiation turn and return a parsed action dict.
- 
+    Call Gemini for one negotiation turn and return a parsed action dict.
+
     On turn 0, uses the first-message prompt.
     On subsequent turns, uses the response prompt with the partner's last message.
 
@@ -301,8 +224,7 @@ def gpt_negotiation_action(
     cfg.experiment.mechanism.action_space) so the prompt text always matches
     the mechanism actually enforced in validate_trade.
     """
- 
-    # Build messages
+
     if turn_index == 0 or not negotiation_history:
         messages = build_negotiation_first_messages(
             player=player,
@@ -318,13 +240,12 @@ def gpt_negotiation_action(
             broadcast=broadcast,
         )
     else:
-        # Last message from partner
         last_partner_msg = ""
         for entry in reversed(negotiation_history):
             if entry.get("speaker_id") != player.id:
                 last_partner_msg = entry.get("message", "")
                 break
- 
+
         messages = build_negotiation_response_messages(
             player=player,
             prompts=prompts,
@@ -339,8 +260,7 @@ def gpt_negotiation_action(
             board_history=board_history,
             broadcast=broadcast,
         )
- 
-    # Log prompt
+
     logger.log_prompt(
         player_id=player.id,
         prompt_type="negotiation",
@@ -348,22 +268,22 @@ def gpt_negotiation_action(
         round_index=round_index,
         pair_id=pair_id,
     )
- 
+
     gen = model_spec.generation
-    raw = _call_openai(
+    raw = _call_gemini(
         client=client,
         messages=messages,
         model=model_spec.model,
         temperature=gen.temperature,
-        max_completion_tokens=gen.max_tokens,
+        max_output_tokens=gen.max_tokens,
         timeout=gen.timeout_seconds,
     )
- 
+
     try:
         parsed = parse_json_response(raw)
         parsed = _validate_negotiation_response(parsed)
     except (ValueError, KeyError) as exc:
-        print(f"  [openai_agent] Parse error for {player.id} negotiation: {exc}")
+        print(f"  [gemini_agent] Parse error for {player.id} negotiation: {exc}")
         parsed = {
             "action_type": "no_trade",
             "message_to_partner": "I'm unable to respond right now.",
@@ -371,7 +291,7 @@ def gpt_negotiation_action(
             "accept_trade": False,
             "reasoning_summary": f"Parse error: {exc}",
         }
- 
+
     logger.log_model_output(
         player_id=player.id,
         output_type="negotiation",
@@ -379,20 +299,20 @@ def gpt_negotiation_action(
         parsed_output=parsed,
         round_index=round_index,
         pair_id=pair_id,
-        provider="openai",
+        provider="google",
         model=model_spec.model,
     )
- 
+
     return parsed
- 
- 
+
+
 def gpt_commitment_decision(
     player: Any,
     prompts: Any,
     goods: List[str],
     proposed_trade: Mapping[str, Any],
     model_spec: Any,
-    client: OpenAI,
+    client: genai.Client,
     logger: RunLogger,
     round_index: int,
     pair_id: str,
@@ -404,11 +324,11 @@ def gpt_commitment_decision(
     prompt_type: str = "commitment",
     output_type: str = "commitment",
 ) -> Dict[str, Any]:
-    """Call GPT for a commitment decision (accept/reject a finalised trade).
+    """Call Gemini for a commitment decision (accept/reject a finalised trade).
 
-    Now receives the full negotiation history with the partner (so the
-    decision is made in context of the full exchange) and, under broadcast,
-    the public market bulletin board.
+    Receives the full negotiation history with the partner (so the decision
+    is made in context of the full exchange) and, under broadcast, the
+    public market bulletin board.
 
     prompt_type/output_type are overridable so callers that reuse this exact
     prompt shape for a different purpose (e.g. shadow_trades.py's hypothetical
@@ -427,7 +347,7 @@ def gpt_commitment_decision(
         board_history=board_history,
         broadcast=broadcast,
     )
- 
+
     logger.log_prompt(
         player_id=player.id,
         prompt_type=prompt_type,
@@ -437,20 +357,20 @@ def gpt_commitment_decision(
     )
 
     gen = model_spec.generation
-    raw = _call_openai(
+    raw = _call_gemini(
         client=client,
         messages=messages,
         model=model_spec.model,
         temperature=gen.temperature,
-        max_completion_tokens=gen.max_tokens,
+        max_output_tokens=gen.max_tokens,
         timeout=gen.timeout_seconds,
     )
 
     try:
         parsed = parse_json_response(raw)
-        parsed = _validate_commitment_decision(parsed)
+        parsed = _validate_commitment_response(parsed)
     except (ValueError, KeyError) as exc:
-        print(f"  [openai_agent] Parse error for {player.id} commitment: {exc}")
+        print(f"  [gemini_agent] Parse error for {player.id} commitment: {exc}")
         parsed = {
             "decision": "reject",
             "reasoning_summary": f"Parse error: {exc}",
@@ -463,23 +383,18 @@ def gpt_commitment_decision(
         parsed_output=parsed,
         round_index=round_index,
         pair_id=pair_id,
-        provider="openai",
+        provider="google",
         model=model_spec.model,
     )
- 
+
     return parsed
- 
- 
-def _validate_commitment_decision(parsed: Dict[str, Any]) -> Dict[str, Any]:
-    """Alias kept for clarity inside this module."""
-    return _validate_commitment_response(parsed)
- 
- 
+
+
 def gpt_preference_probe(
     player: Any,
     prompts: Any,
     model_spec: Any,
-    client: OpenAI,
+    client: genai.Client,
     logger: RunLogger,
     round_index: int,
     display_order: List[str],
@@ -488,7 +403,7 @@ def gpt_preference_probe(
     board_history: Optional[List[str]] = None,
     broadcast: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """Call GPT for a preference elicitation probe.
+    """Call Gemini for a preference elicitation probe.
 
     display_order: run-wide goods order used for the question text, the
     inventory display, the schema, and the example.
@@ -513,21 +428,21 @@ def gpt_preference_probe(
     )
 
     gen = model_spec.generation
-    raw = _call_openai(
+    raw = _call_gemini(
         client=client,
         messages=messages,
         model=model_spec.model,
         temperature=gen.temperature,
-        max_completion_tokens=gen.max_tokens,
+        max_output_tokens=gen.max_tokens,
         timeout=gen.timeout_seconds,
-        response_format=_build_probe_schema(display_order),
+        response_schema=_build_probe_schema(display_order),
     )
 
     try:
         parsed = parse_json_response(raw)
         parsed = _validate_probe_response(parsed)
     except (ValueError, KeyError) as exc:
-        print(f"  [openai_agent] Parse error for {player.id} probe — skipping. {exc}")
+        print(f"  [gemini_agent] Parse error for {player.id} probe — skipping. {exc}")
         logger.log_model_output(
             player_id=player.id,
             output_type="preference_probe",
@@ -535,7 +450,7 @@ def gpt_preference_probe(
             parsed_output=None,
             round_index=round_index,
             pair_id=None,
-            provider="openai",
+            provider="google",
             model=model_spec.model,
         )
         return None
@@ -547,16 +462,17 @@ def gpt_preference_probe(
         parsed_output=parsed,
         round_index=round_index,
         pair_id=None,
-        provider="openai",
+        provider="google",
         model=model_spec.model,
     )
     return parsed
+
 
 def gpt_preference_probe_contextual(
     player: Any,
     prompts: Any,
     model_spec: Any,
-    client: "OpenAI",
+    client: "genai.Client",
     logger: Any,
     round_index: int,
     prior_history: List[Dict[str, str]],
@@ -584,8 +500,6 @@ def gpt_preference_probe_contextual(
     fixed in history. Returns (parsed_dict, raw_response_text) so the caller
     can append the raw text as the next assistant message in prior_history.
     """
-    from prompt_render import build_preference_probe_messages
-
     base_messages = build_preference_probe_messages(
         player=player,
         prompts=prompts,
@@ -611,12 +525,12 @@ def gpt_preference_probe_contextual(
     )
 
     gen = model_spec.generation
-    raw = _call_openai(
+    raw = _call_gemini(
         client=client,
         messages=messages,
         model=model_spec.model,
         temperature=gen.temperature,
-        max_completion_tokens=gen.max_tokens,
+        max_output_tokens=gen.max_tokens,
         timeout=gen.timeout_seconds,
     )
 
@@ -624,7 +538,7 @@ def gpt_preference_probe_contextual(
         parsed = parse_json_response(raw)
         parsed = _validate_probe_response(parsed)
     except (ValueError, KeyError) as exc:
-        print(f"  [openai_agent] Parse error for {player.id} contextual probe: {exc}")
+        print(f"  [gemini_agent] Parse error for {player.id} contextual probe: {exc}")
         parsed = {
             "ratings_inventory": {g: 5 for g in display_order},
             "ratings_general": {g: 5 for g in display_order},
@@ -638,44 +552,8 @@ def gpt_preference_probe_contextual(
         parsed_output=parsed,
         round_index=round_index,
         pair_id=None,
-        provider="openai",
+        provider="google",
         model=model_spec.model,
     )
 
     return parsed, raw
-
-def _build_probe_schema(display_order: List[str]) -> Dict[str, Any]:
-    """
-    Build a Structured Outputs schema for the probe with goods in the given
-    display order. Property order matters: even though JSON is technically
-    unordered, the API respects the order given here when generating output.
-    """
-    def _int_object(order: List[str]) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {g: {"type": "integer"} for g in order},
-            "required": list(order),
-            "additionalProperties": False,
-        }
-
-    return {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "preference_probe",
-            "strict": True,
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "ratings_inventory": _int_object(display_order),
-                    "ratings_general":   _int_object(display_order),
-                    "desired_bundle":    _int_object(display_order),
-                },
-                "required": [
-                    "ratings_inventory",
-                    "ratings_general",
-                    "desired_bundle",
-                ],
-                "additionalProperties": False,
-            },
-        },
-    }
