@@ -134,7 +134,9 @@ def validate_trade(
     receive_total = sum(receive.values())
     if give_total < rules.min_units_per_side or receive_total < rules.min_units_per_side:
         return False, f"Trade below min_units_per_side={rules.min_units_per_side}"
-    if give_total > rules.max_units_per_side or receive_total > rules.max_units_per_side:
+    if rules.max_units_per_side is not None and (
+        give_total > rules.max_units_per_side or receive_total > rules.max_units_per_side
+    ):
         return False, f"Trade exceeds max_units_per_side={rules.max_units_per_side}"
  
     if rules.enforce_inventory_constraints:
@@ -755,9 +757,16 @@ def run_round(
                     # AND that player gains the good in `gains`. The
                     # proposer gains everything in `receive`; the
                     # responder gains everything in `give`. First matching
-                    # rule wins; fallback is market_bulletin_template.
-                    template_name = "market_bulletin_template"
+                    # rule wins.
+                    #
+                    # If bulletin_rules is configured (non-empty), a trade
+                    # that matches none of them is NOT broadcast at all —
+                    # only rule-matching trades reach the bulletin board.
+                    # market_bulletin_template is used only as the
+                    # catch-all when bulletin_rules is unset/empty, i.e.
+                    # the plain "broadcast every filtered trade" mode.
                     rules = cfg.experiment.mechanism.bulletin_rules or []
+                    template_name = None
                     for rule in rules:
                         if rule.player == proposer_id and rule.gains in proposed["receive"]:
                             template_name = rule.template
@@ -766,22 +775,26 @@ def run_round(
                             template_name = rule.template
                             break
 
-                    template = getattr(cfg.prompts, template_name, None)
-                    if template is None:
-                        logger.append_transcript(
-                            f"  [BULLETIN WARNING] template '{template_name}' "
-                            f"not found in prompts.yaml; using default.\n"
-                        )
-                        template = cfg.prompts.market_bulletin_template
+                    if template_name is None and not rules:
+                        template_name = "market_bulletin_template"
 
-                    bulletin = template.format(
-                        proposer_name=proposer_name,
-                        give_str=give_str,
-                        receive_str=receive_str,
-                        responder_name=responder_name,
-                    )
-                    # Buffer it; visible to agents only at round end.
-                    pending_bulletins.append(bulletin)
+                    if template_name is not None:
+                        template = getattr(cfg.prompts, template_name, None)
+                        if template is None:
+                            logger.append_transcript(
+                                f"  [BULLETIN WARNING] template '{template_name}' "
+                                f"not found in prompts.yaml; using default.\n"
+                            )
+                            template = cfg.prompts.market_bulletin_template
+
+                        bulletin = template.format(
+                            proposer_name=proposer_name,
+                            give_str=give_str,
+                            receive_str=receive_str,
+                            responder_name=responder_name,
+                        )
+                        # Buffer it; visible to agents only at round end.
+                        pending_bulletins.append(bulletin)
  
         else:
             reason = pair_result.get("rejection_reason", "unknown")

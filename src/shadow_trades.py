@@ -39,7 +39,7 @@ def _trade_shape_allowed(
     receive: Mapping[str, int],
     action_space: str,
     min_units_per_side: int,
-    max_units_per_side: int,
+    max_units_per_side: Optional[int],
 ) -> bool:
     """
     Mirrors the shape checks in runner.validate_trade (minus the two-sided
@@ -50,7 +50,9 @@ def _trade_shape_allowed(
 
     if give_total < min_units_per_side or receive_total < min_units_per_side:
         return False
-    if give_total > max_units_per_side or receive_total > max_units_per_side:
+    if max_units_per_side is not None and (
+        give_total > max_units_per_side or receive_total > max_units_per_side
+    ):
         return False
 
     if action_space in ("one_for_one", "small_bundle"):
@@ -71,7 +73,7 @@ def generate_shadow_trade_specs(
     directions: Iterable[str],
     action_space: str,
     min_units_per_side: int,
-    max_units_per_side: int,
+    max_units_per_side: Optional[int],
     counter_goods: Optional[Iterable[str]] = None,
 ) -> List[Dict[str, Any]]:
     """

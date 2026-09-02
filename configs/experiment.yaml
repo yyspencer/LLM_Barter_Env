@@ -69,7 +69,7 @@ mechanism:
   broadcast_completed_trades: false
   # Only broadcast trades involving these players. Null = broadcast all trades.
   # Example: [player_1, player_5] = only trades where agent 1 or 5 participates.
-  broadcast_filter_players: [player_1,player_2,player_3,player_4]
+  broadcast_filter_players: [player_3,player_4]
   # Optional: pick a different bulletin template depending on who's trading
   # and what they're gaining. Each rule has:
   #   player:   the agent ID to check
@@ -88,24 +88,24 @@ mechanism:
      - player: player_4
        gains: B
        template: bulletin_p4_gains_b 
-     - player: player_3
-       gains: A
-       template: bulletin_p3_gains_a
-     - player: player_4
-       gains: A
-       template: bulletin_p4_gains_a
-     - player: player_1
-       gains: C
-       template: bulletin_p1_gains_c
-     - player: player_2
-       gains: C
-       template: bulletin_p2_gains_c
-     - player: player_3
-       gains: C
-       template: bulletin_p3_gains_c
-     - player: player_4
-       gains: C
-       template: bulletin_p4_gains_c            
+    #  - player: player_3
+    #    gains: A
+    #    template: bulletin_p3_gains_a
+    #  - player: player_4
+    #    gains: A
+    #    template: bulletin_p4_gains_a
+    #  - player: player_1
+    #    gains: C
+    #    template: bulletin_p1_gains_c
+    #  - player: player_2
+    #    gains: C
+    #    template: bulletin_p2_gains_c
+    #  - player: player_3
+    #    gains: C
+    #    template: bulletin_p3_gains_c
+    #  - player: player_4
+    #    gains: C
+    #    template: bulletin_p4_gains_c            
   mediator_enabled: false
 
 trade_rules:
@@ -114,7 +114,7 @@ trade_rules:
   enforce_inventory_constraints: true
   integer_goods_only: true
   min_units_per_side: 1
-  max_units_per_side: 3
+  max_units_per_side: null  # set to null (or omit) for no upper bound; still limited by each agent's inventory
 
   # For v1, conflicts should not happen because players appear in only one pair
   # per round. This is here for future scalability.
@@ -191,7 +191,10 @@ stopping:
   stop_if_market_converged: false
 
 logging:
-  output_dir: runs
+  # Kept outside OneDrive's sync tree: writing hundreds of small files per
+  # run inside a synced folder collides with OneDrive's periodic upload
+  # locks and intermittently throws PermissionError on append.
+  output_dir: C:/ExperimentRuns/LLM_Barter_Env/runs
   save_config_snapshot: true
   save_event_jsonl: true
   save_trade_json: true

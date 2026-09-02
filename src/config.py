@@ -208,7 +208,8 @@ class TradeRulesConfig(BaseModel):
     enforce_inventory_constraints: bool = True
     integer_goods_only: bool = True
     min_units_per_side: int = Field(default=1, ge=0)
-    max_units_per_side: int = Field(default=1, ge=1)
+    # None means no upper bound (still subject to inventory constraints).
+    max_units_per_side: Optional[int] = Field(default=1, ge=1)
     conflict_resolution: Dict[str, Any] = Field(default_factory=dict)
 
 

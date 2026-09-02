@@ -65,7 +65,7 @@ _BASE_BACKOFF = 2.0   # seconds; doubles each retry
 # model to return truncated/empty text (finish_reason=MAX_TOKENS). We cap
 # thinking at a fixed budget and add it on top, so a caller's max_tokens
 # continues to mean "budget for the visible answer" as it does for OpenAI.
-_THINKING_BUDGET = 1024
+_THINKING_BUDGET = 1000
 
 
 def _to_gemini_contents(

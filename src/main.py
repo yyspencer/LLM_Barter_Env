@@ -226,6 +226,20 @@ Modes:
               "averaging out variance, especially with --random and --run. "
               "Ignored by --dry-run."),
     )
+    parser.add_argument(
+        "--start-run-index",
+        type=int,
+        default=1,
+        help=("1-indexed run number to start counting from (default: 1). Use "
+              "this to resume a --num-runs batch that was interrupted "
+              "partway through: e.g. if runs 1-35 of an original batch "
+              "already completed and run 36 crashed, pass "
+              "--start-run-index 36 --num-runs <remaining count> to "
+              "continue seed increments, output-folder numbering "
+              "(..._run_36, _run_37, ...), and display-order "
+              "counterbalancing exactly where the original batch left off, "
+              "instead of restarting from run 1."),
+    )
  
     # Config paths
     parser.add_argument(
@@ -272,6 +286,8 @@ Modes:
 
     if args.num_runs < 1:
         parser.error(f"--num-runs must be >= 1 (got {args.num_runs})")
+    if args.start_run_index < 1:
+        parser.error(f"--start-run-index must be >= 1 (got {args.start_run_index})")
 
     # API keys are needed for any run that actually calls an LLM.
     # That's --run, --run-gemini, --run-claude, and --probe-only. Everything
@@ -323,17 +339,25 @@ Modes:
             for p in cfg.players.players:
                 p.inventory = dict(starting_inventories[p.id])
 
-            if args.num_runs > 1:
-                cfg.experiment.experiment.seed = base_seed + i
-                cfg.experiment.experiment.name = f"{base_name}_run_{i + 1}"
+            # Global 1-indexed run number, offset by --start-run-index so a
+            # resumed batch continues seed increments, folder naming, and
+            # display-order counterbalancing from where an earlier
+            # (possibly interrupted) batch left off, instead of restarting
+            # at run 1.
+            run_number = args.start_run_index + i
+
+            if args.num_runs > 1 or args.start_run_index > 1:
+                cfg.experiment.experiment.seed = base_seed + (run_number - 1)
+                cfg.experiment.experiment.name = f"{base_name}_run_{run_number}"
 
             # Assign the counterbalancing run index. This is 1-indexed so
             # run_index=1 maps to ORDER_PATTERN[0] = ['A', 'B', 'C'].
-            cfg.experiment.experiment.run_index = i + 1
+            cfg.experiment.experiment.run_index = run_number
 
             bar = "=" * 60
-            print(f"\n{bar}\n=== Run {cfg.experiment.experiment.run_index} of "
-                  f"{args.num_runs} (seed={cfg.experiment.experiment.seed}, "
+            print(f"\n{bar}\n=== Run {cfg.experiment.experiment.run_index} "
+                  f"({i + 1} of {args.num_runs} this invocation) "
+                  f"(seed={cfg.experiment.experiment.seed}, "
                   f"display_order={order_for_run(cfg.experiment.experiment.run_index)}) ===\n{bar}")
 
             if args.mock_run:
