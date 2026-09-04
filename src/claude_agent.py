@@ -33,7 +33,14 @@ import json
 import time
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from anthropic import Anthropic, APIConnectionError, APITimeoutError, RateLimitError
+from anthropic import (
+    Anthropic,
+    APIConnectionError,
+    APITimeoutError,
+    InternalServerError,
+    OverloadedError,
+    RateLimitError,
+)
 
 from logger import RunLogger
 from openai_agent import (
@@ -43,10 +50,11 @@ from openai_agent import (
     parse_json_response,
 )
 from prompt_render import (
-    build_commitment_messages,
-    build_negotiation_first_messages,
-    build_negotiation_response_messages,
+    build_commitment_messages_cacheable,
+    build_negotiation_first_messages_cacheable,
+    build_negotiation_response_messages_cacheable,
     build_preference_probe_messages,
+    build_preference_probe_messages_cacheable,
 )
 
 DEFAULT_MODEL = "claude-sonnet-5"
@@ -58,7 +66,13 @@ _TOOL_NAME = "submit_response"
 # API call with retry
 # ---------------------------------------------------------------------------
 
-_RETRYABLE = (APITimeoutError, APIConnectionError, RateLimitError)
+_RETRYABLE = (
+    APITimeoutError,
+    APIConnectionError,
+    RateLimitError,
+    OverloadedError,      # 529 — Anthropic's servers are temporarily over capacity
+    InternalServerError,  # 500 — transient server-side error
+)
 _MAX_RETRIES = 3
 _BASE_BACKOFF = 2.0   # seconds; doubles each retry
 
@@ -96,6 +110,7 @@ def _call_claude(
     max_tokens: int,
     timeout: float,
     response_schema: Optional[Dict[str, Any]] = None,
+    cache_history_text: Optional[str] = None,
 ) -> str:
     """
     Call the Anthropic Messages API with retry on transient errors.
@@ -105,10 +120,37 @@ def _call_claude(
     feed it through the same parse_json_response() pipeline used everywhere
     else regardless of provider.
 
+    cache_history_text, when given, is the growing-but-append-only prefix
+    of the final user message (world-state / negotiation-so-far / trade
+    history — see the *_cacheable prompt_render builders). It's split out
+    into its own cache_control-marked content block so repeated calls in
+    the same round reuse it from Anthropic's cache instead of paying full
+    input price for history that hasn't changed. If the last user message
+    doesn't actually start with cache_history_text (should not happen, but
+    prompt_render.py is the source of truth, not this string check), the
+    message is sent unsplit rather than risk corrupting it.
+
     Returns the raw text content of the response.
     Raises RuntimeError if all retries are exhausted.
     """
     system_prompt, claude_messages = _to_claude_messages(messages)
+
+    if cache_history_text is not None and claude_messages:
+        last = claude_messages[-1]
+        if (
+            last["role"] == "user"
+            and isinstance(last["content"], str)
+            and last["content"].startswith(cache_history_text)
+        ):
+            volatile_text = last["content"][len(cache_history_text):]
+            last["content"] = [
+                {
+                    "type": "text",
+                    "text": cache_history_text,
+                    "cache_control": {"type": "ephemeral"},
+                },
+                {"type": "text", "text": volatile_text},
+            ]
 
     # claude-sonnet-5 rejects `temperature` outright ("deprecated for this
     # model" — 400 error): it manages its own sampling. `temperature` stays
@@ -131,12 +173,27 @@ def _call_claude(
         "thinking": {"type": "disabled"},
     }
     if system_prompt is not None:
-        kwargs["system"] = system_prompt
+        # system_prompt (game rules + persona) depends only on player and
+        # display_order, both fixed for the whole run — byte-identical
+        # across every call this player makes. Cache it: everything up to
+        # and including this block (tools + system) becomes a cache hit on
+        # this player's next call of the same type, instead of full-price
+        # input tokens.
+        kwargs["system"] = [{
+            "type": "text",
+            "text": system_prompt,
+            "cache_control": {"type": "ephemeral"},
+        }]
     if response_schema is not None:
+        # input_schema depends only on display_order (fixed for the run),
+        # so it's identical across every negotiation/commitment/probe call
+        # regardless of player — a separate, wider-hit-rate breakpoint than
+        # the per-player system prompt above.
         kwargs["tools"] = [{
             "name": _TOOL_NAME,
             "description": "Submit the structured response for this turn.",
             "input_schema": response_schema,
+            "cache_control": {"type": "ephemeral"},
         }]
         kwargs["tool_choice"] = {"type": "tool", "name": _TOOL_NAME}
 
@@ -211,6 +268,82 @@ def _build_probe_schema(display_order: List[str]) -> Dict[str, Any]:
     }
 
 
+_NEGOTIATION_ACTION_TYPES = [
+    "message", "offer", "counteroffer", "accept", "reject", "no_trade",
+]
+
+
+def _build_negotiation_schema(display_order: List[str]) -> Dict[str, Any]:
+    """
+    Build a JSON Schema for a negotiation turn, used as the input_schema of
+    the forced tool call. Mirrors the fields _validate_negotiation_response
+    (openai_agent.py) requires/defaults, so a schema-conformant tool call
+    always passes validation without falling through to the parse-error path.
+
+    proposed_trade's give/receive sides allow *any subset* of display_order
+    with nonnegative quantities (not "all goods required") — validate_trade
+    (runner.py) is what enforces action-space-specific shape rules (e.g.
+    one_for_one's exactly-one-good-each-side, any_bundle's no restriction),
+    so the schema only needs to be permissive enough to cover every
+    configured action_space, not encode one specific one.
+    """
+    def _trade_side() -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {g: {"type": "integer", "minimum": 0} for g in display_order},
+            "additionalProperties": False,
+        }
+
+    return {
+        "type": "object",
+        "properties": {
+            "action_type": {"type": "string", "enum": _NEGOTIATION_ACTION_TYPES},
+            "message_to_partner": {"type": "string"},
+            "proposed_trade": {
+                "anyOf": [
+                    {"type": "null"},
+                    {
+                        "type": "object",
+                        "properties": {
+                            "give": _trade_side(),
+                            "receive": _trade_side(),
+                        },
+                        "required": ["give", "receive"],
+                        "additionalProperties": False,
+                    },
+                ]
+            },
+            "accept_trade": {"anyOf": [{"type": "null"}, {"type": "boolean"}]},
+            "reasoning_summary": {"type": "string"},
+        },
+        "required": [
+            "action_type",
+            "message_to_partner",
+            "proposed_trade",
+            "accept_trade",
+            "reasoning_summary",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def _build_commitment_schema() -> Dict[str, Any]:
+    """
+    Build a JSON Schema for a commitment (accept/reject) decision, used as
+    the input_schema of the forced tool call. Mirrors the fields
+    _validate_commitment_response (openai_agent.py) requires.
+    """
+    return {
+        "type": "object",
+        "properties": {
+            "decision": {"type": "string", "enum": ["accept", "reject"]},
+            "reasoning_summary": {"type": "string"},
+        },
+        "required": ["decision", "reasoning_summary"],
+        "additionalProperties": False,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Public agent functions
 # ---------------------------------------------------------------------------
@@ -245,7 +378,7 @@ def gpt_negotiation_action(
     """
 
     if turn_index == 0 or not negotiation_history:
-        messages = build_negotiation_first_messages(
+        system, history_text, volatile_text = build_negotiation_first_messages_cacheable(
             player=player,
             prompts=prompts,
             goods=goods,
@@ -265,7 +398,7 @@ def gpt_negotiation_action(
                 last_partner_msg = entry.get("message", "")
                 break
 
-        messages = build_negotiation_response_messages(
+        system, history_text, volatile_text = build_negotiation_response_messages_cacheable(
             player=player,
             prompts=prompts,
             goods=goods,
@@ -279,6 +412,11 @@ def gpt_negotiation_action(
             board_history=board_history,
             broadcast=broadcast,
         )
+
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": history_text + "\n\n" + volatile_text},
+    ]
 
     logger.log_prompt(
         player_id=player.id,
@@ -296,6 +434,8 @@ def gpt_negotiation_action(
         temperature=gen.temperature,
         max_tokens=gen.max_tokens,
         timeout=gen.timeout_seconds,
+        response_schema=_build_negotiation_schema(display_order),
+        cache_history_text=history_text,
     )
 
     try:
@@ -354,7 +494,7 @@ def gpt_commitment_decision(
     offers) can tag their logs distinctly from real commitment decisions,
     without duplicating this function.
     """
-    messages = build_commitment_messages(
+    system, history_text, volatile_text = build_commitment_messages_cacheable(
         player=player,
         prompts=prompts,
         goods=goods,
@@ -366,6 +506,10 @@ def gpt_commitment_decision(
         board_history=board_history,
         broadcast=broadcast,
     )
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": history_text + "\n\n" + volatile_text},
+    ]
 
     logger.log_prompt(
         player_id=player.id,
@@ -383,6 +527,8 @@ def gpt_commitment_decision(
         temperature=gen.temperature,
         max_tokens=gen.max_tokens,
         timeout=gen.timeout_seconds,
+        response_schema=_build_commitment_schema(),
+        cache_history_text=history_text,
     )
 
     try:
@@ -427,7 +573,7 @@ def gpt_preference_probe(
     display_order: run-wide goods order used for the question text, the
     inventory display, the schema, and the example.
     """
-    messages = build_preference_probe_messages(
+    system, history_text, volatile_text = build_preference_probe_messages_cacheable(
         player=player,
         prompts=prompts,
         display_order=display_order,
@@ -437,6 +583,10 @@ def gpt_preference_probe(
         board_history=board_history,
         broadcast=broadcast,
     )
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": history_text + "\n\n" + volatile_text},
+    ]
 
     logger.log_prompt(
         player_id=player.id,
@@ -455,6 +605,7 @@ def gpt_preference_probe(
         max_tokens=gen.max_tokens,
         timeout=gen.timeout_seconds,
         response_schema=_build_probe_schema(display_order),
+        cache_history_text=history_text,
     )
 
     try:

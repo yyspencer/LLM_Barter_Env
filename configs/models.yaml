@@ -2,11 +2,11 @@ version: 1
 
 model_pool:
   - id: gpt
-    enabled: true
+    enabled: false
     provider: openai
     model: gpt-5.6-terra
     api_env_var: OPENAI_API_KEY
-    count: 6
+    count: 0
     generation:
       temperature: 1
       max_tokens: 2000
@@ -24,11 +24,11 @@ model_pool:
       timeout_seconds: 60
 
   - id: claude
-    enabled: false
+    enabled: true
     provider: anthropic
     model: claude-sonnet-5
     api_env_var: ANTHROPIC_API_KEY
-    count: 0
+    count: 6
     generation:
       temperature: 1
       max_tokens: 2000

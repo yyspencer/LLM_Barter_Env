@@ -51,13 +51,45 @@ def _strip_markdown_fences(text: str) -> str:
  
 def _extract_first_json_object(text: str) -> str:
     """
-    Pull the first {...} block out of a string that has surrounding prose.
-    Returns the substring if found, otherwise returns text unchanged.
+    Pull the first complete {...} object out of a string that has
+    surrounding prose, which models sometimes emit both before *and after*
+    the JSON block (e.g. reasoning first, then the answer).
+
+    Uses json.JSONDecoder.raw_decode rather than a greedy brace-spanning regex:
+    a greedy DOTALL match walks from the first '{' to the *last* '}'
+    anywhere in the string, so trailing prose after the real object (or a
+    stray brace inside it) silently corrupts the substring it returns.
+    raw_decode instead tries each '{' in turn and stops as soon as one of
+    them yields a structurally complete object, so leading/trailing prose
+    can't leak into the result.
+
+    Scans the whole string and, among all top-level objects that parse
+    cleanly, keeps the largest one. A single `raw_decode` at the first '{'
+    is not enough: models sometimes quote a small JSON-ish example inline
+    as part of their reasoning (e.g. "such as {"B": 1}") before the real
+    answer block, and that fragment is itself perfectly valid JSON — taking
+    the first success would return that fragment instead of the intended
+    response. The real answer is reliably the biggest object in the text.
+
+    Returns the substring covering the largest object, or `text` unchanged
+    if no valid JSON object starts anywhere in it.
     """
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        return match.group(0)
-    return text
+    decoder = json.JSONDecoder()
+    best: Optional[str] = None
+    start = 0
+    while True:
+        start = text.find("{", start)
+        if start == -1:
+            break
+        try:
+            _, end = decoder.raw_decode(text, start)
+            candidate = text[start:end]
+            if best is None or len(candidate) > len(best):
+                best = candidate
+            start = end  # skip past this object; don't re-scan inside it
+        except json.JSONDecodeError:
+            start += 1
+    return best if best is not None else text
  
  
 def _strip_trailing_commas(text: str) -> str:
