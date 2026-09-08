@@ -555,6 +555,71 @@ def build_negotiation_first_messages(
     ]
 
 
+def build_negotiation_first_messages_cacheable(
+    player,
+    prompts,
+    goods: Iterable[str],
+    round_index: int,
+    partner_name: str,
+    action_space: str,
+    display_order: List[str],
+    trade_history: Optional[TradeHistory] = None,
+    negotiation_history: Optional[NegotiationHistory] = None,
+    board_history: Optional[TradeHistory] = None,
+    broadcast: bool = False,
+) -> tuple[str, str, str]:
+    """
+    Like build_negotiation_first_messages, but split into
+    (system, history_text, volatile_text) instead of one joined user
+    string, for callers that support prompt caching (claude_agent.py).
+
+    history_text is the world-state block (round/inventory/trade
+    history/negotiation history[/board]). Within a single round's
+    negotiation, round_index/inventory/trade_history are constant and
+    negotiation_history only ever grows by appending lines, so history_text
+    is an exact-prefix match of the previous turn's history_text plus new
+    content at the end — the shape prompt caching is built to reuse.
+    volatile_text (the turn-specific prompt + response format instructions)
+    changes every call and should never be cached.
+
+    history_text + "\n\n" + volatile_text reproduces the exact same string
+    build_negotiation_first_messages would have put in the user message, so
+    callers can still log/inspect the flat form losslessly.
+    """
+    system = "\n\n".join(
+        [
+            render_system_prompt(prompts, display_order),
+            render_persona_prompt(player, prompts, display_order),
+        ]
+    )
+
+    history_text = render_world_state_prompt(
+        player=player,
+        prompts=prompts,
+        goods=goods,
+        round_index=round_index,
+        partner_name=partner_name,
+        display_order=display_order,
+        trade_history=trade_history,
+        negotiation_history=negotiation_history,
+        board_history=board_history,
+        broadcast=broadcast,
+    )
+
+    volatile_text = "\n\n".join(
+        [
+            render_negotiation_first_message_prompt(
+                prompts=prompts,
+                partner_name=partner_name,
+                action_space=action_space,
+            ),
+            render_response_format_instruction(prompts, "negotiation", action_space=action_space),
+        ]
+    )
+
+    return system, history_text, volatile_text
+
+
 def build_negotiation_response_messages(
     player,
     prompts,
@@ -605,6 +670,61 @@ def build_negotiation_response_messages(
         {"role": "system", "content": system},
         {"role": "user", "content": "\n\n".join(user_parts)},
     ]
+
+
+def build_negotiation_response_messages_cacheable(
+    player,
+    prompts,
+    goods: Iterable[str],
+    round_index: int,
+    partner_name: str,
+    partner_message: str,
+    action_space: str,
+    display_order: List[str],
+    trade_history: Optional[TradeHistory] = None,
+    negotiation_history: Optional[NegotiationHistory] = None,
+    board_history: Optional[TradeHistory] = None,
+    broadcast: bool = False,
+) -> tuple[str, str, str]:
+    """
+    Cache-aware counterpart to build_negotiation_response_messages — see
+    build_negotiation_first_messages_cacheable for the rationale. Note
+    partner_message lives in volatile_text (it's the newest, just-arrived
+    turn, not part of the growing history block).
+    """
+    system = "\n\n".join(
+        [
+            render_system_prompt(prompts, display_order),
+            render_persona_prompt(player, prompts, display_order),
+        ]
+    )
+
+    history_text = render_world_state_prompt(
+        player=player,
+        prompts=prompts,
+        goods=goods,
+        round_index=round_index,
+        partner_name=partner_name,
+        display_order=display_order,
+        trade_history=trade_history,
+        negotiation_history=negotiation_history,
+        board_history=board_history,
+        broadcast=broadcast,
+    )
+
+    volatile_text = "\n\n".join(
+        [
+            render_negotiation_response_prompt(
+                prompts=prompts,
+                partner_name=partner_name,
+                partner_message=partner_message,
+                action_space=action_space,
+            ),
+            render_response_format_instruction(prompts, "negotiation", action_space=action_space),
+        ]
+    )
+
+    return system, history_text, volatile_text
 
 
 def build_commitment_messages(
@@ -661,6 +781,61 @@ def build_commitment_messages(
     ]
 
 
+def build_commitment_messages_cacheable(
+    player,
+    prompts,
+    goods: Iterable[str],
+    proposed_trade: Mapping[str, Any],
+    display_order: List[str],
+    round_index: int = 0,
+    partner_name: str = "your partner",
+    negotiation_history: Optional[NegotiationHistory] = None,
+    board_history: Optional[Any] = None,
+    broadcast: bool = False,
+) -> tuple[str, str, str]:
+    """
+    Cache-aware counterpart to build_commitment_messages. history_text is
+    the round + negotiation-so-far context (grows the same append-only way
+    as the negotiation calls' world-state block, so it's incrementally
+    cacheable within a round). volatile_text is the specific offer being
+    decided on (they_give/you_give) plus the response format instructions —
+    the actual decision point, never cached.
+    """
+    system = "\n\n".join(
+        [
+            render_system_prompt(prompts, display_order),
+            render_persona_prompt(player, prompts, display_order),
+        ]
+    )
+
+    history_parts = [
+        render_commitment_context(
+            prompts=prompts,
+            round_index=round_index,
+            partner_name=partner_name,
+            negotiation_history=negotiation_history,
+        ),
+    ]
+    if broadcast:
+        history_parts.append(render_bulletin_board_section(prompts, board_history))
+    history_text = "\n\n".join(history_parts)
+
+    volatile_text = "\n\n".join(
+        [
+            render_commitment_prompt(
+                player=player,
+                prompts=prompts,
+                goods=goods,
+                proposed_trade=proposed_trade,
+                display_order=display_order,
+            ),
+            render_response_format_instruction(prompts, "commitment"),
+        ]
+    )
+
+    return system, history_text, volatile_text
+
+
 def build_preference_probe_messages(
     player,
     prompts,
@@ -709,3 +884,54 @@ def build_preference_probe_messages(
         {"role": "system", "content": system},
         {"role": "user", "content": "\n\n".join(user_parts)},
     ]
+
+
+def build_preference_probe_messages_cacheable(
+    player,
+    prompts,
+    display_order: List[str],
+    goods: Iterable[str] = ("A", "B", "C"),
+    round_index: int = 0,
+    trade_history: Optional[TradeHistory] = None,
+    board_history: Optional[Any] = None,
+    broadcast: bool = False,
+) -> tuple[str, str, str]:
+    """
+    Cache-aware counterpart to build_preference_probe_messages. history_text
+    is the round + inventory + trade-history-so-far context (grows
+    append-only across rounds). volatile_text is the fixed probe question
+    plus its response format instructions — static per run, but kept
+    separate from history_text since it doesn't grow and isn't worth
+    chasing here.
+    """
+    system = "\n\n".join(
+        [
+            render_system_prompt(prompts, display_order),
+            render_persona_prompt(player, prompts, display_order),
+        ]
+    )
+
+    history_parts = [
+        render_probe_context(
+            player=player,
+            prompts=prompts,
+            goods=goods,
+            round_index=round_index,
+            display_order=display_order,
+            trade_history=trade_history,
+        ),
+    ]
+    if broadcast:
+        history_parts.append(render_bulletin_board_section(prompts, board_history))
+    history_text = "\n\n".join(history_parts)
+
+    volatile_text = "\n\n".join(
+        [
+            render_preference_elicitation_prompt(prompts, display_order),
+            render_response_format_instruction(
+                prompts, "preference_probe", display_order=display_order
+            ),
+        ]
+    )
+
+    return system, history_text, volatile_text
