@@ -171,27 +171,18 @@ probe_context_template: |
   Recent trades you completed:
   {trade_history}
 
-# Appended to commitment OR probe context under the broadcast condition only.
-# Exposes the public market bulletin board (the "fair and necessary"
-# framing). This is the channel through which the broadcast experimental
-# condition is expected to induce preference drift, so it must be visible
-# to the probe as well as to negotiation.
+# Appended to commitment or probe context under the broadcast condition only.
 bulletin_board_section_template: |
   Market Bulletin Board:
   {board_history}
 
 # Text appended to each trade's market bulletin under the broadcast condition.
-# The framing clause ("Trade described by participants as 'fair and necessary.'")
-# is the key experimental manipulation — change it here to try different
-# rhetorical framings without touching any code.
 # Available placeholders: {proposer_name}, {give_str}, {receive_str}, {responder_name}.
 market_bulletin_template: .
 #"Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by participants as 'fair and necessary.'"
 
 # Additional bulletin templates selectable via mechanism.bulletin_rules in
-# experiment.yaml. Add as many as you need with any field name you choose —
-# the PromptsConfig schema allows arbitrary extra fields. The names below
-# match the example rules commented in experiment.yaml.
+# experiment.yaml. 
 #bulletin_p1_gains_a: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 1 as 'extremely fair and necessary.'"
 #bulletin_p1_gains_b: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 1 as 'extremelyunfair and unnecessary.'"
 #bulletin_p2_gains_a: "Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by Agent 2 as 'extremely fair and necessary.'"
