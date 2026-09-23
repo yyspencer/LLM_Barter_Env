@@ -922,8 +922,12 @@ def effective_broadcast(exp_cfg: Any, num_players: int, round_index: int) -> boo
     though the underlying mechanism config is unchanged for the rest of the
     run. round_index=0 (pre-run) and -1 (post-run) never fall in the
     washout block, so they're unaffected.
+
+    prompts.static_broadcast_message rides on this same gate (see
+    resolve_board_history): it only appears when broadcast_completed_trades
+    is on, it does not turn broadcast on by itself.
     """
-    base_broadcast = exp_cfg.mechanism.broadcast_completed_trades
+    base_broadcast = bool(exp_cfg.mechanism.broadcast_completed_trades)
     washout_cfg = exp_cfg.washout
     if (
         base_broadcast
@@ -933,6 +937,25 @@ def effective_broadcast(exp_cfg: Any, num_players: int, round_index: int) -> boo
     ):
         return False
     return base_broadcast
+
+
+def resolve_board_history(
+    prompts: Any, bulletin_board: Optional[List[str]]
+) -> Optional[List[str]]:
+    """
+    Build the bulletin-board content actually shown to an agent: the fixed
+    prompts.static_broadcast_message (if configured) followed by the
+    trade-induced bulletins accumulated so far. Only called at call sites
+    already gated on effective_broadcast (i.e. broadcast_completed_trades),
+    so the static message never appears when that's off. Read-only — never
+    pass the result to something that mutates it in place, since it's a
+    fresh list when a static message is configured and the real accumulator
+    otherwise.
+    """
+    static_message = getattr(prompts, "static_broadcast_message", "") if prompts else ""
+    if not static_message:
+        return bulletin_board
+    return [static_message] + list(bulletin_board or [])
 
 
 # ---------------------------------------------------------------------------
@@ -1013,7 +1036,7 @@ def _run_experiment_loop(
             shadow_commitment_fn=shadow_commitment_fn,
             display_order=display_order,
             trade_history=trade_history,
-            bulletin_board=bulletin_board if pre_run_broadcast else None,
+            bulletin_board=resolve_board_history(cfg.prompts, bulletin_board) if pre_run_broadcast else None,
             broadcast=pre_run_broadcast,
         )
 
@@ -1085,7 +1108,7 @@ def _run_experiment_loop(
                 shadow_commitment_fn=shadow_commitment_fn,
                 display_order=display_order,
                 trade_history=trade_history,
-                bulletin_board=bulletin_board if round_broadcast else None,
+                bulletin_board=resolve_board_history(cfg.prompts, bulletin_board) if round_broadcast else None,
                 broadcast=round_broadcast,
             )
 
@@ -1117,7 +1140,7 @@ def _run_experiment_loop(
             shadow_commitment_fn=shadow_commitment_fn,
             display_order=display_order,
             trade_history=trade_history,
-            bulletin_board=bulletin_board if post_run_broadcast else None,
+            bulletin_board=resolve_board_history(cfg.prompts, bulletin_board) if post_run_broadcast else None,
             broadcast=post_run_broadcast,
         )
  
@@ -1425,7 +1448,7 @@ def run_llm_experiment(cfg: LoadedConfig, provider_id: str) -> RunLogger:
             pair_id=pair_id,
             display_order=display_order,
             action_space=exp_cfg.mechanism.action_space,
-            board_history=bulletin_board if round_broadcast else None,
+            board_history=resolve_board_history(prompts, bulletin_board) if round_broadcast else None,
             broadcast=round_broadcast,
         )
 
@@ -1447,7 +1470,7 @@ def run_llm_experiment(cfg: LoadedConfig, provider_id: str) -> RunLogger:
             display_order=display_order,
             partner_name=partner_name,
             negotiation_history=negotiation_history,
-            board_history=bulletin_board if round_broadcast else None,
+            board_history=resolve_board_history(prompts, bulletin_board) if round_broadcast else None,
             broadcast=round_broadcast,
         )
 
@@ -1492,7 +1515,7 @@ def run_llm_experiment(cfg: LoadedConfig, provider_id: str) -> RunLogger:
             display_order=display_order,
             partner_name="another trader in the market",
             negotiation_history=None,
-            board_history=bulletin_board if round_broadcast else None,
+            board_history=resolve_board_history(prompts, bulletin_board) if round_broadcast else None,
             broadcast=round_broadcast,
             prompt_type="shadow_commitment",
             output_type="shadow_commitment",

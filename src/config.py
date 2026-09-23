@@ -410,6 +410,15 @@ class PromptsConfig(BaseModel):
     probe_context_template: str
     bulletin_board_section_template: str
     market_bulletin_template: str
+    # Simple alternative to market_bulletin_template/bulletin_rules: a fixed
+    # string shown on the market bulletin board for every prompt (world
+    # state, commitment, and preference probe), regardless of whether any
+    # trade has actually happened. Only takes effect when
+    # mechanism.broadcast_completed_trades is true in experiment.yaml (it
+    # does not turn the bulletin board on by itself), and is suppressed
+    # during washout rounds when washout.disable_broadcast is set. Empty
+    # string disables it.
+    static_broadcast_message: str = ""
 
     response_formats: Dict[str, ResponseFormatConfig]
     action_space_descriptions: Dict[str, str]

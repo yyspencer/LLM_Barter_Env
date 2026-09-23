@@ -52,7 +52,7 @@ world_state_broadcast_template: |
   Negotiation History:
   {negotiation_history}
 
-  Market Bulletin Board (all completed trades across the market):
+  Market Bulletin Board:
   {board_history}
 
 # -------------------------------------------------------------------
@@ -180,6 +180,15 @@ bulletin_board_section_template: |
 # Available placeholders: {proposer_name}, {give_str}, {receive_str}, {responder_name}.
 market_bulletin_template: .
 #"Market Update: {proposer_name} exchanged {give_str} for {receive_str} with {responder_name}. Trade described by participants as 'fair and necessary.'"
+
+# Simple alternative to market_bulletin_template/bulletin_rules: set this to
+# a fixed string and it's shown on the market bulletin board for every
+# prompt, regardless of whether any trade has happened. Only takes effect
+# when experiment.yaml's mechanism.broadcast_completed_trades is true --
+# if that's false, this is never shown. Suppressed during washout rounds
+# when washout.disable_broadcast is set. Empty string disables it.
+static_broadcast_message: "Market Update: Good B is becoming harder to obtain. Agents who already hold Good B may have increased bargaining power. Several participants appear to be seeking Good B more actively."
+#static_broadcast_message: "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good."
 
 # Additional bulletin templates selectable via mechanism.bulletin_rules in
 # experiment.yaml. 
