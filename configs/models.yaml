@@ -2,33 +2,33 @@ version: 1
 
 model_pool:
   - id: gpt
-    enabled: false
+    enabled: true
     provider: openai
     model: gpt-5.6-terra
     api_env_var: OPENAI_API_KEY
-    count: 0
+    count: 6
     generation:
       temperature: 1
       max_tokens: 2000
       timeout_seconds: 60
 
   - id: gemini
-    enabled: true
+    enabled: false
     provider: google
     model: gemini-3.1-pro-preview
     api_env_var: GEMINI_API_KEY
-    count: 6
+    count: 0
     generation:
       temperature: 1
       max_tokens: 1000
       timeout_seconds: 120
 
   - id: claude
-    enabled: true
+    enabled: false
     provider: anthropic
     model: claude-sonnet-5
     api_env_var: ANTHROPIC_API_KEY
-    count: 6
+    count: 0
     generation:
       temperature: 1
       max_tokens: 2000
