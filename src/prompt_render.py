@@ -356,18 +356,22 @@ def render_commitment_context(
     round_index: int,
     partner_name: str,
     negotiation_history: Optional[NegotiationHistory],
+    trade_history: Optional[TradeHistory] = None,
 ) -> str:
     """
-    Render the context block prepended to the commitment prompt: round number
-    and the negotiation history with the partner up to this offer. Without
-    this, the commitment decision is made on the bare offer text only — with
-    it, the responder evaluates the offer in light of the whole exchange.
+    Render the context block prepended to the commitment prompt: round number,
+    the agent's own completed-trade history, and the negotiation history with
+    the partner up to this offer. Without this, the commitment decision is
+    made on the bare offer text only — with it, the responder evaluates the
+    offer in light of the whole exchange and of what it has already traded
+    away in earlier rounds.
     """
     return safe_format(
         prompts.commitment_context_template,
         round_index=round_index,
         partner_name=partner_name,
         negotiation_history=format_negotiation_history(negotiation_history),
+        trade_history=format_trade_history(trade_history),
     ).strip()
 
 
@@ -736,16 +740,19 @@ def build_commitment_messages(
     round_index: int = 0,
     partner_name: str = "your partner",
     negotiation_history: Optional[NegotiationHistory] = None,
+    trade_history: Optional[TradeHistory] = None,
     board_history: Optional[Any] = None,
     broadcast: bool = False,
 ) -> list[dict[str, str]]:
     """
     Build chat messages for the commitment phase.
 
-    The commitment now sees the same negotiation history the negotiation
-    phase produced, so the accept/reject decision is made in light of the
-    full back-and-forth rather than the bare offer text. Under the broadcast
-    condition the public market bulletin board is also shown.
+    The commitment sees the same negotiation history the negotiation phase
+    produced plus the agent's own completed-trade history, so the
+    accept/reject decision is made in light of the full back-and-forth and
+    of what the agent already traded away in earlier rounds, rather than the
+    bare offer text. Under the broadcast condition the public market
+    bulletin board is also shown.
     """
     system = "\n\n".join(
         [
@@ -760,6 +767,7 @@ def build_commitment_messages(
             round_index=round_index,
             partner_name=partner_name,
             negotiation_history=negotiation_history,
+            trade_history=trade_history,
         ),
     ]
     if broadcast:
@@ -790,14 +798,17 @@ def build_commitment_messages_cacheable(
     round_index: int = 0,
     partner_name: str = "your partner",
     negotiation_history: Optional[NegotiationHistory] = None,
+    trade_history: Optional[TradeHistory] = None,
     board_history: Optional[Any] = None,
     broadcast: bool = False,
 ) -> tuple[str, str, str]:
     """
     Cache-aware counterpart to build_commitment_messages. history_text is
-    the round + negotiation-so-far context (grows the same append-only way
-    as the negotiation calls' world-state block, so it's incrementally
-    cacheable within a round). volatile_text is the specific offer being
+    the round + trade-history + negotiation-so-far context (grows the same
+    append-only way as the negotiation calls' world-state block, so it's
+    incrementally cacheable within a round — trade_history is constant for
+    the whole round, so it never breaks the prefix match).
+    volatile_text is the specific offer being
     decided on (they_give/you_give) plus the response format instructions —
     the actual decision point, never cached.
     """
@@ -814,6 +825,7 @@ def build_commitment_messages_cacheable(
             round_index=round_index,
             partner_name=partner_name,
             negotiation_history=negotiation_history,
+            trade_history=trade_history,
         ),
     ]
     if broadcast:
