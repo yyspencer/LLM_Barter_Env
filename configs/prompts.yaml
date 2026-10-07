@@ -235,10 +235,10 @@ negotiation_offer_examples:
     Example response for making an offer:
     {
       "action_type": "offer",
-      "message_to_partner": "I can offer 1 unit of C for 1 unit of A.",
-      "proposed_trade": {"give": {"C": 1}, "receive": {"A": 1}},
+      "message_to_partner": "I can offer 1 unit of {good_3} for 1 unit of {good_1}.",
+      "proposed_trade": {"give": {"{good_3}": 1}, "receive": {"{good_1}": 1}},
       "accept_trade": null,
-      "reasoning_summary": "I value A more than C."
+      "reasoning_summary": "I value {good_1} more than {good_3}."
     }
   small_bundle: >
     Example response for making an offer of unequal quantities of the
@@ -246,10 +246,10 @@ negotiation_offer_examples:
     a single good, but quantities greater than 1 are allowed):
     {
       "action_type": "offer",
-      "message_to_partner": "I can offer 2 units of C for 1 unit of A.",
-      "proposed_trade": {"give": {"C": 2}, "receive": {"A": 1}},
+      "message_to_partner": "I can offer 2 units of {good_3} for 1 unit of {good_1}.",
+      "proposed_trade": {"give": {"{good_3}": 2}, "receive": {"{good_1}": 1}},
       "accept_trade": null,
-      "reasoning_summary": "I have surplus C and need more A."
+      "reasoning_summary": "I have surplus {good_3} and need more {good_1}."
     }
   any_bundle: >
     Example response for making an offer that mixes more than one good
@@ -257,10 +257,10 @@ negotiation_offer_examples:
     receive, not just varying the quantity of a single good):
     {
       "action_type": "offer",
-      "message_to_partner": "I can offer 1 unit of A and 1 unit of B for 2 units of C.",
-      "proposed_trade": {"give": {"A": 1, "B": 1}, "receive": {"C": 2}},
+      "message_to_partner": "I can offer 1 unit of {good_1} and 1 unit of {good_2} for 2 units of {good_3}.",
+      "proposed_trade": {"give": {"{good_1}": 1, "{good_2}": 1}, "receive": {"{good_3}": 2}},
       "accept_trade": null,
-      "reasoning_summary": "I have surplus A and B, and need more C."
+      "reasoning_summary": "I have surplus {good_1} and {good_2}, and need more {good_3}."
     }
 
 response_formats:
@@ -272,9 +272,9 @@ response_formats:
       Do not include hidden chain-of-thought. reasoning_summary should be concise.
 
       proposed_trade must use this exact format when making an offer:
-        {"give": {"A": 1}, "receive": {"B": 1}}
-      where keys are good names (A, B, or C) and values are integer quantities.
-      Do NOT use {"give": {"good": "A", "quantity": 1}} — that format is wrong.
+        {"give": {"{good_1}": 1}, "receive": {"{good_2}": 1}}
+      where keys are good names ({good_1}, {good_2}, or {good_3}) and values are integer quantities.
+      Do NOT use {"give": {"good": "{good_1}", "quantity": 1}} — that format is wrong.
       Set proposed_trade to null if you are not making an offer.
 
       action_type must be one of: message, offer, counteroffer, reject, no_trade.
@@ -362,14 +362,14 @@ action_space_descriptions:
   small_bundle: >
     You may propose at most one trade involving small integer quantities of goods,
     subject to your available inventory. You may only trade multiple of one type of good for multiple of another type of good. 
-    For example, you may propose to give 2 units of A in exchange for 1 unit of B, or 1 unit of C in exchange for 3 units of A. 
-    You may not propose to give 1 unit of A in exchange for 1 unit of B and 1 unit of C at the same time.
+    For example, you may propose to give 2 units of {good_1} in exchange for 1 unit of {good_2}, or 1 unit of {good_3} in exchange for 3 units of {good_1}. 
+    You may not propose to give 1 unit of {good_1} in exchange for 1 unit of {good_2} and 1 unit of {good_3} at the same time.
   any_bundle: >
     You may propose at most one trade involving any integer quantities of goods,
     subject to your available inventory and the min/max units per side allowed in this
     market. Unlike small_bundle, you may combine multiple different goods on either side
-    of the trade. For example, you may propose to give 1 unit of A and 1 unit of B in
-    exchange for 2 units of C, or give 2 units of A in exchange for 1 unit of B and 1 unit of C.
+    of the trade. For example, you may propose to give 1 unit of {good_1} and 1 unit of {good_2} in
+    exchange for 2 units of {good_3}, or give 2 units of {good_1} in exchange for 1 unit of {good_2} and 1 unit of {good_3}.
 
 # -------------------------------------------------------------------
 # Logging formats

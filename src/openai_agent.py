@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
  
 from openai import OpenAI, APITimeoutError, APIConnectionError, RateLimitError
@@ -151,8 +151,59 @@ def parse_json_response(raw: str) -> Dict[str, Any]:
             f"Raw output (first 500 chars): {raw[:500]}\n"
             f"Error: {exc}"
         ) from exc
- 
- 
+
+
+class OfferMissingTradeError(ValueError):
+    """action_type is offer/counteroffer but proposed_trade is null/empty."""
+
+    def __init__(self, parsed: Dict[str, Any]):
+        super().__init__(
+            f"action_type {parsed.get('action_type')!r} has no proposed_trade"
+        )
+        self.parsed = parsed
+
+
+# Total attempts (first call + re-asks) when a response can't be parsed or
+# fails validation. Shared by all three provider agents.
+_MAX_PARSE_ATTEMPTS = 3
+
+
+def call_until_parsed(
+    call_fn: Callable[[], str],
+    validate: Callable[[Dict[str, Any]], Dict[str, Any]],
+) -> Tuple[str, Optional[Dict[str, Any]], Optional[Exception]]:
+    """
+    Call the model and parse + validate its output, re-sending the identical
+    prompt if the output is malformed.
+
+    Returns (raw, parsed, None) on success, or (last_raw, None, last_exc) if
+    every attempt failed, so the caller can apply its own fallback. Only the
+    final attempt's raw output is returned (and therefore logged), which
+    keeps raw_prompts.jsonl and raw_model_outputs.jsonl one-to-one.
+    """
+    raw = ""
+    last_exc: Optional[Exception] = None
+    for attempt in range(1, _MAX_PARSE_ATTEMPTS + 1):
+        raw = call_fn()
+        try:
+            return raw, validate(parse_json_response(raw)), None
+        except (ValueError, KeyError) as exc:
+            last_exc = exc
+            if attempt < _MAX_PARSE_ATTEMPTS:
+                first_line = str(exc).splitlines()[0] if str(exc) else repr(exc)
+                print(
+                    f"  [parse retry] attempt {attempt}/{_MAX_PARSE_ATTEMPTS} "
+                    f"unparseable ({first_line}); repeating the prompt..."
+                )
+    # A trade-less offer is still a well-formed response. If the model keeps
+    # producing one, pass it through as-is (the runner treats it as a plain
+    # message) instead of the caller's parse-error fallback, which would end
+    # the whole negotiation.
+    if isinstance(last_exc, OfferMissingTradeError):
+        return raw, last_exc.parsed, None
+    return raw, None, last_exc
+
+
 # ---------------------------------------------------------------------------
 # API call with retry
 # ---------------------------------------------------------------------------
@@ -237,6 +288,11 @@ def _validate_negotiation_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
  
     parsed.setdefault("proposed_trade", None)
     parsed.setdefault("accept_trade", None)
+
+    # An offer/counteroffer with no proposed_trade does nothing in the
+    # runner (no commitment phase), so re-ask rather than waste the turn.
+    if parsed["action_type"] in ("offer", "counteroffer") and not parsed["proposed_trade"]:
+        raise OfferMissingTradeError(parsed)
     return parsed
  
  
@@ -382,19 +438,19 @@ def gpt_negotiation_action(
     )
  
     gen = model_spec.generation
-    raw = _call_openai(
-        client=client,
-        messages=messages,
-        model=model_spec.model,
-        temperature=gen.temperature,
-        max_completion_tokens=gen.max_tokens,
-        timeout=gen.timeout_seconds,
+    raw, parsed, exc = call_until_parsed(
+        lambda: _call_openai(
+            client=client,
+            messages=messages,
+            model=model_spec.model,
+            temperature=gen.temperature,
+            max_completion_tokens=gen.max_tokens,
+            timeout=gen.timeout_seconds,
+        ),
+        validate=_validate_negotiation_response,
     )
- 
-    try:
-        parsed = parse_json_response(raw)
-        parsed = _validate_negotiation_response(parsed)
-    except (ValueError, KeyError) as exc:
+
+    if exc is not None:
         print(f"  [openai_agent] Parse error for {player.id} negotiation: {exc}")
         parsed = {
             "action_type": "no_trade",
@@ -469,19 +525,19 @@ def gpt_commitment_decision(
     )
 
     gen = model_spec.generation
-    raw = _call_openai(
-        client=client,
-        messages=messages,
-        model=model_spec.model,
-        temperature=gen.temperature,
-        max_completion_tokens=gen.max_tokens,
-        timeout=gen.timeout_seconds,
+    raw, parsed, exc = call_until_parsed(
+        lambda: _call_openai(
+            client=client,
+            messages=messages,
+            model=model_spec.model,
+            temperature=gen.temperature,
+            max_completion_tokens=gen.max_tokens,
+            timeout=gen.timeout_seconds,
+        ),
+        validate=_validate_commitment_decision,
     )
 
-    try:
-        parsed = parse_json_response(raw)
-        parsed = _validate_commitment_decision(parsed)
-    except (ValueError, KeyError) as exc:
+    if exc is not None:
         print(f"  [openai_agent] Parse error for {player.id} commitment: {exc}")
         parsed = {
             "decision": "reject",
@@ -545,20 +601,20 @@ def gpt_preference_probe(
     )
 
     gen = model_spec.generation
-    raw = _call_openai(
-        client=client,
-        messages=messages,
-        model=model_spec.model,
-        temperature=gen.temperature,
-        max_completion_tokens=gen.max_tokens,
-        timeout=gen.timeout_seconds,
-        response_format=_build_probe_schema(display_order),
+    raw, parsed, exc = call_until_parsed(
+        lambda: _call_openai(
+            client=client,
+            messages=messages,
+            model=model_spec.model,
+            temperature=gen.temperature,
+            max_completion_tokens=gen.max_tokens,
+            timeout=gen.timeout_seconds,
+            response_format=_build_probe_schema(display_order),
+        ),
+        validate=_validate_probe_response,
     )
 
-    try:
-        parsed = parse_json_response(raw)
-        parsed = _validate_probe_response(parsed)
-    except (ValueError, KeyError) as exc:
+    if exc is not None:
         print(f"  [openai_agent] Parse error for {player.id} probe — skipping. {exc}")
         logger.log_model_output(
             player_id=player.id,
@@ -643,19 +699,19 @@ def gpt_preference_probe_contextual(
     )
 
     gen = model_spec.generation
-    raw = _call_openai(
-        client=client,
-        messages=messages,
-        model=model_spec.model,
-        temperature=gen.temperature,
-        max_completion_tokens=gen.max_tokens,
-        timeout=gen.timeout_seconds,
+    raw, parsed, exc = call_until_parsed(
+        lambda: _call_openai(
+            client=client,
+            messages=messages,
+            model=model_spec.model,
+            temperature=gen.temperature,
+            max_completion_tokens=gen.max_tokens,
+            timeout=gen.timeout_seconds,
+        ),
+        validate=_validate_probe_response,
     )
 
-    try:
-        parsed = parse_json_response(raw)
-        parsed = _validate_probe_response(parsed)
-    except (ValueError, KeyError) as exc:
+    if exc is not None:
         print(f"  [openai_agent] Parse error for {player.id} contextual probe: {exc}")
         parsed = None
 

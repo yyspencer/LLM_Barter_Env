@@ -123,6 +123,11 @@ def format_negotiation_history(
             lines.append(f"[ACCEPT DID NOT REGISTER] {note}")
             continue
 
+        if msg.get("source") == "invalid_offer":
+            note = msg.get("message") or msg.get("content") or ""
+            lines.append(f"[INVALID OFFER] {note}")
+            continue
+
         speaker = (
             msg.get("speaker")
             or msg.get("speaker_name")
@@ -270,9 +275,28 @@ def render_world_state_prompt(
     return safe_format(template, **values).strip()
 
 
-def render_action_space_description(action_space: str, prompts) -> str:
+def substitute_goods(text: str, display_order: Optional[List[str]]) -> str:
     """
-    Render the action-space description selected by experiment.yaml.
+    Replace {good_1}/{good_2}/{good_3} with the run's display order.
+
+    Plain string replacement rather than str.format, because the texts this
+    is used on (JSON examples in prompts.yaml) are full of literal braces.
+    With no display_order, falls back to A, B, C.
+    """
+    order = list(display_order) if display_order else ["A", "B", "C"]
+    for i, good in enumerate(order, start=1):
+        text = text.replace(f"{{good_{i}}}", good)
+    return text
+
+
+def render_action_space_description(
+    action_space: str,
+    prompts,
+    display_order: Optional[List[str]] = None,
+) -> str:
+    """
+    Render the action-space description selected by experiment.yaml, with
+    its example goods in display_order.
     """
     descriptions = prompts.action_space_descriptions
     if action_space not in descriptions:
@@ -280,13 +304,14 @@ def render_action_space_description(action_space: str, prompts) -> str:
             f"Action space '{action_space}' not found in prompts.action_space_descriptions. "
             f"Available: {sorted(descriptions.keys())}"
         )
-    return descriptions[action_space].strip()
+    return substitute_goods(descriptions[action_space].strip(), display_order)
 
 
 def render_negotiation_first_message_prompt(
     prompts,
     partner_name: str,
     action_space: str,
+    display_order: Optional[List[str]] = None,
 ) -> str:
     """
     Render the prompt for the first message in a negotiation.
@@ -294,7 +319,9 @@ def render_negotiation_first_message_prompt(
     return safe_format(
         prompts.negotiation_first_message_prompt,
         partner_name=partner_name,
-        action_space_description=render_action_space_description(action_space, prompts),
+        action_space_description=render_action_space_description(
+            action_space, prompts, display_order
+        ),
     ).strip()
 
 
@@ -303,6 +330,7 @@ def render_negotiation_response_prompt(
     partner_name: str,
     partner_message: str,
     action_space: str,
+    display_order: Optional[List[str]] = None,
 ) -> str:
     """
     Render the prompt for responding to a partner's message.
@@ -311,7 +339,9 @@ def render_negotiation_response_prompt(
         prompts.negotiation_response_prompt,
         partner_name=partner_name,
         partner_message=partner_message,
-        action_space_description=render_action_space_description(action_space, prompts),
+        action_space_description=render_action_space_description(
+            action_space, prompts, display_order
+        ),
     ).strip()
 
 
@@ -339,12 +369,19 @@ def render_commitment_prompt(
     they_give_text = format_goods_dict(partner_gives)
     you_give_text  = format_goods_dict(partner_receives)
 
+    # Same good_1/good_2/good_3 substitution as render_persona_prompt, so the
+    # Merchant description reads identically here and in the system prompt.
+    g1, g2, g3 = display_order
+    description = safe_format(
+        player.preference_description, good_1=g1, good_2=g2, good_3=g3
+    )
+
     return safe_format(
         prompts.commitment_prompt,
         they_give=they_give_text,
         you_give=you_give_text,
         inventory=inventory_text,
-        preference_description=player.preference_description,
+        preference_description=description,
         display_name=player.display_name,
         player_id=player.id,
         role=getattr(player, "role", None) or "",
@@ -451,6 +488,10 @@ def render_response_format_instruction(
         if examples and action_space in examples:
             text = text + "\n\n" + examples[action_space].strip()
 
+    if format_name == "negotiation":
+        # Schema text and worked example name goods via {good_1..3}.
+        text = substitute_goods(text, display_order)
+
     if format_name == "preference_probe" and display_order is not None:
         text = _render_probe_schema_text(display_order)
 
@@ -545,8 +586,12 @@ def build_negotiation_first_messages(
             prompts=prompts,
             partner_name=partner_name,
             action_space=action_space,
+            display_order=display_order,
         ),
-        render_response_format_instruction(prompts, "negotiation", action_space=action_space),
+        render_response_format_instruction(
+                prompts, "negotiation",
+                action_space=action_space, display_order=display_order,
+            ),
     ]
 
     return [
@@ -612,8 +657,12 @@ def build_negotiation_first_messages_cacheable(
                 prompts=prompts,
                 partner_name=partner_name,
                 action_space=action_space,
+                display_order=display_order,
             ),
-            render_response_format_instruction(prompts, "negotiation", action_space=action_space),
+            render_response_format_instruction(
+                prompts, "negotiation",
+                action_space=action_space, display_order=display_order,
+            ),
         ]
     )
 
@@ -662,8 +711,12 @@ def build_negotiation_response_messages(
             partner_name=partner_name,
             partner_message=partner_message,
             action_space=action_space,
+            display_order=display_order,
         ),
-        render_response_format_instruction(prompts, "negotiation", action_space=action_space),
+        render_response_format_instruction(
+                prompts, "negotiation",
+                action_space=action_space, display_order=display_order,
+            ),
     ]
 
     return [
@@ -719,8 +772,12 @@ def build_negotiation_response_messages_cacheable(
                 partner_name=partner_name,
                 partner_message=partner_message,
                 action_space=action_space,
+                display_order=display_order,
             ),
-            render_response_format_instruction(prompts, "negotiation", action_space=action_space),
+            render_response_format_instruction(
+                prompts, "negotiation",
+                action_space=action_space, display_order=display_order,
+            ),
         ]
     )
 

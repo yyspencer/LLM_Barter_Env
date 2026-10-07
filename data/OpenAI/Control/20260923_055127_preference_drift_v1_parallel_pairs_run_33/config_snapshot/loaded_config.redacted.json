@@ -2,11 +2,11 @@
   "experiment": {
     "version": 1,
     "experiment": {
-      "name": "preference_drift_v1_parallel_pairs",
+      "name": "preference_drift_v1_parallel_pairs_run_33",
       "description": "Multi-agent barter environment for measuring stated and revealed preference drift under repeated pairwise negotiation. Agents trade in independent pairs within each round, and all pairs in the same round can be run in parallel.\n",
-      "seed": 42,
+      "seed": 74,
       "num_runs": 1,
-      "run_index": 1
+      "run_index": 33
     },
     "market": {
       "goods": [
@@ -46,7 +46,7 @@
       "enforce_inventory_constraints": true,
       "integer_goods_only": true,
       "anonymous": false,
-      "broadcast_completed_trades": true,
+      "broadcast_completed_trades": false,
       "broadcast_filter_players": [
         "none"
       ],
@@ -439,7 +439,7 @@
     "probe_context_template": "Round {round_index}.\n\nYour current inventory: {inventory_line}\n\nRecent trades you completed:\n{trade_history}\n",
     "bulletin_board_section_template": "Market Bulletin Board:\n{board_history}\n",
     "market_bulletin_template": ".",
-    "static_broadcast_message": "Market Update: Several participants now appear to regard Good B as especially useful. Recent negotiations suggest growing agreement that good B is important for successful trading.",
+    "static_broadcast_message": "Market Update: Good B is becoming harder to obtain. Agents who already hold Good B may have increased bargaining power. Several participants appear to be seeking Good B more actively.",
     "response_formats": {
       "negotiation": {
         "type": "json",
@@ -516,8 +516,6 @@
     "personas": null,
     "endowments": null,
     "utility_functions": null,
-    "bulletin_p3_gains_b": "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good.",
-    "bulletin_p4_gains_b": "Market Analyst Bulletin: Based on recent exchanges, Good B appears to be increasingly valuable. Agents who acquire Good B may be better positioned for future trades. The analyst recommends treating Good B as a strategically important good.",
     "negotiation_offer_examples": {
       "one_for_one": "Example response for making an offer: {\n  \"action_type\": \"offer\",\n  \"message_to_partner\": \"I can offer 1 unit of C for 1 unit of A.\",\n  \"proposed_trade\": {\"give\": {\"C\": 1}, \"receive\": {\"A\": 1}},\n  \"accept_trade\": null,\n  \"reasoning_summary\": \"I value A more than C.\"\n}\n",
       "small_bundle": "Example response for making an offer of unequal quantities of the same two goods (small_bundle allows this -- each side must still be a single good, but quantities greater than 1 are allowed): {\n  \"action_type\": \"offer\",\n  \"message_to_partner\": \"I can offer 2 units of C for 1 unit of A.\",\n  \"proposed_trade\": {\"give\": {\"C\": 2}, \"receive\": {\"A\": 1}},\n  \"accept_trade\": null,\n  \"reasoning_summary\": \"I have surplus C and need more A.\"\n}\n",

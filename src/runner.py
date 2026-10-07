@@ -25,6 +25,7 @@ difference is the agent callables passed into the shared loop.
 from __future__ import annotations
 
 import importlib
+import re
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
  
 from config import LoadedConfig
@@ -101,6 +102,19 @@ def validate_trade(
             if not isinstance(qty, int) or qty < 0:
                 return False, f"{side_name}.{good} must be a nonneg int, got {qty}"
  
+    # A good may not appear on both sides (e.g. give 2×C, receive 1×C).
+    # Zero-quantity entries are ignored so {"A": 1, "B": 0} for {"B": 1}
+    # is still fine.
+    both_sides = sorted(
+        {g for g, q in give.items() if q > 0} & {g for g, q in receive.items() if q > 0}
+    )
+    if both_sides:
+        return (
+            False,
+            f"The same good cannot be on both sides of a trade "
+            f"(both sides include {', '.join(both_sides)})",
+        )
+
     action_space = cfg.experiment.mechanism.action_space
 
     if action_space == "one_for_one":
@@ -489,10 +503,13 @@ def run_pair_negotiation(
                 f"moment they are made, not after the fact. Nothing was "
                 f"traded.]\n"
             )
+            # speaker_id is the partner's so that, on the partner's next
+            # turn, the "last partner message" lookup skips this note and
+            # still quotes the accepting agent's actual message.
             negotiation_history.append({
                 "turn": turn,
-                "speaker_id": current.id,
-                "speaker": current.display_name,
+                "speaker_id": other.id,
+                "speaker": other.display_name,
                 "action_type": "system_note",
                 "message": (
                     f"{current.display_name} tried to ACCEPT on their own "
@@ -525,7 +542,45 @@ def run_pair_negotiation(
                 logger.append_transcript(
                     f"  [INVALID TRADE from {current.display_name}: {reason}]\n"
                 )
-                result["rejection_reason"] = f"Invalid trade: {reason}"
+                # rejection_reason is deliberately left alone: an invalid
+                # offer doesn't end the negotiation, so the pair's final
+                # reason is whatever actually ends it (turn limit, no_trade).
+
+                # Tell both agents the offer never reached the commitment
+                # phase, so the proposer doesn't assume it is still pending
+                # and the partner knows it was not asked to accept/reject it.
+                # The agent-facing reason uses display names and omits exact
+                # holdings ("(has N)") so it doesn't leak inventory counts.
+                agent_reason = re.sub(r"\s*\(has \d+\)", "", reason)
+                agent_reason = re.sub(r"^(Proposer|Responder) ", "", agent_reason)
+                agent_reason = (
+                    agent_reason
+                    .replace(current.id, current.display_name)
+                    .replace(other.id, other.display_name)
+                )
+                give_str = format_goods_dict(proposed.get("give") or {})
+                receive_str = format_goods_dict(proposed.get("receive") or {})
+                # speaker_id is the partner's so that, on the partner's next
+                # turn, the "last partner message" lookup skips this note and
+                # still quotes the proposer's actual message.
+                negotiation_history.append({
+                    "turn": turn,
+                    "speaker_id": other.id,
+                    "speaker": other.display_name,
+                    "action_type": "system_note",
+                    "message": (
+                        f"{current.display_name}'s offer "
+                        f"({current.display_name} gives {give_str or 'nothing'}; "
+                        f"{current.display_name} receives {receive_str or 'nothing'}) "
+                        f"was INVALID and was not sent to {other.display_name} "
+                        f"for a decision. Reason: {agent_reason}. "
+                        f"Nothing was traded. The negotiation continues — a "
+                        f"different, feasible offer may still be proposed."
+                    ),
+                    "proposed_trade": None,
+                    "accept_trade": None,
+                    "source": "invalid_offer",
+                })
                 continue
  
             commitment = commitment_fn(

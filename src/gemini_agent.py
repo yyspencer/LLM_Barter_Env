@@ -38,6 +38,7 @@ from openai_agent import (
     _validate_commitment_response,
     _validate_negotiation_response,
     _validate_probe_response,
+    call_until_parsed,
     parse_json_response,
 )
 from prompt_render import (
@@ -270,19 +271,19 @@ def gpt_negotiation_action(
     )
 
     gen = model_spec.generation
-    raw = _call_gemini(
-        client=client,
-        messages=messages,
-        model=model_spec.model,
-        temperature=gen.temperature,
-        max_output_tokens=gen.max_tokens,
-        timeout=gen.timeout_seconds,
+    raw, parsed, exc = call_until_parsed(
+        lambda: _call_gemini(
+            client=client,
+            messages=messages,
+            model=model_spec.model,
+            temperature=gen.temperature,
+            max_output_tokens=gen.max_tokens,
+            timeout=gen.timeout_seconds,
+        ),
+        validate=_validate_negotiation_response,
     )
 
-    try:
-        parsed = parse_json_response(raw)
-        parsed = _validate_negotiation_response(parsed)
-    except (ValueError, KeyError) as exc:
+    if exc is not None:
         print(f"  [gemini_agent] Parse error for {player.id} negotiation: {exc}")
         parsed = {
             "action_type": "no_trade",
@@ -357,19 +358,19 @@ def gpt_commitment_decision(
     )
 
     gen = model_spec.generation
-    raw = _call_gemini(
-        client=client,
-        messages=messages,
-        model=model_spec.model,
-        temperature=gen.temperature,
-        max_output_tokens=gen.max_tokens,
-        timeout=gen.timeout_seconds,
+    raw, parsed, exc = call_until_parsed(
+        lambda: _call_gemini(
+            client=client,
+            messages=messages,
+            model=model_spec.model,
+            temperature=gen.temperature,
+            max_output_tokens=gen.max_tokens,
+            timeout=gen.timeout_seconds,
+        ),
+        validate=_validate_commitment_response,
     )
 
-    try:
-        parsed = parse_json_response(raw)
-        parsed = _validate_commitment_response(parsed)
-    except (ValueError, KeyError) as exc:
+    if exc is not None:
         print(f"  [gemini_agent] Parse error for {player.id} commitment: {exc}")
         parsed = {
             "decision": "reject",
@@ -428,20 +429,20 @@ def gpt_preference_probe(
     )
 
     gen = model_spec.generation
-    raw = _call_gemini(
-        client=client,
-        messages=messages,
-        model=model_spec.model,
-        temperature=gen.temperature,
-        max_output_tokens=gen.max_tokens,
-        timeout=gen.timeout_seconds,
-        response_schema=_build_probe_schema(display_order),
+    raw, parsed, exc = call_until_parsed(
+        lambda: _call_gemini(
+            client=client,
+            messages=messages,
+            model=model_spec.model,
+            temperature=gen.temperature,
+            max_output_tokens=gen.max_tokens,
+            timeout=gen.timeout_seconds,
+            response_schema=_build_probe_schema(display_order),
+        ),
+        validate=_validate_probe_response,
     )
 
-    try:
-        parsed = parse_json_response(raw)
-        parsed = _validate_probe_response(parsed)
-    except (ValueError, KeyError) as exc:
+    if exc is not None:
         print(f"  [gemini_agent] Parse error for {player.id} probe — skipping. {exc}")
         logger.log_model_output(
             player_id=player.id,
@@ -525,19 +526,19 @@ def gpt_preference_probe_contextual(
     )
 
     gen = model_spec.generation
-    raw = _call_gemini(
-        client=client,
-        messages=messages,
-        model=model_spec.model,
-        temperature=gen.temperature,
-        max_output_tokens=gen.max_tokens,
-        timeout=gen.timeout_seconds,
+    raw, parsed, exc = call_until_parsed(
+        lambda: _call_gemini(
+            client=client,
+            messages=messages,
+            model=model_spec.model,
+            temperature=gen.temperature,
+            max_output_tokens=gen.max_tokens,
+            timeout=gen.timeout_seconds,
+        ),
+        validate=_validate_probe_response,
     )
 
-    try:
-        parsed = parse_json_response(raw)
-        parsed = _validate_probe_response(parsed)
-    except (ValueError, KeyError) as exc:
+    if exc is not None:
         print(f"  [gemini_agent] Parse error for {player.id} contextual probe: {exc}")
         parsed = None
 
