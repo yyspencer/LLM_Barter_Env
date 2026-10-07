@@ -218,6 +218,7 @@ def run_shadow_trades_for_player(
     shadow_commitment_fn: Optional[ShadowCommitmentFn],
     specs: List[Dict[str, Any]],
     display_order: Optional[List[str]] = None,
+    trade_history: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Send one player the full battery of feasible shadow trades (see
@@ -259,6 +260,7 @@ def run_shadow_trades_for_player(
             round_index=round_index,
             shadow_id=spec["shadow_id"],
             display_order=display_order,
+            trade_history=trade_history,
         )
 
         # Hypothetical only — this is never applied to the real inventory,
@@ -384,6 +386,7 @@ def run_preference_probes(
             shadow_commitment_fn=shadow_commitment_fn,
             specs=shadow_specs,
             display_order=display_order,
+            trade_history=(trade_history or {}).get(player.id),
         )
 
         probe_record = {
@@ -423,9 +426,17 @@ def run_pair_negotiation(
     negotiation_fn: NegotiationFn,
     commitment_fn: CommitmentFn,
     display_order: Optional[List[str]] = None,
+    trade_history: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> Dict[str, Any]:
     """
     Run one pair's negotiation using the provided agent callables.
+
+    trade_history maps player_id -> that player's completed trades so far. It
+    is sliced per player at each call so both the negotiating agent and the
+    responder deciding on an offer see their OWN trade history. Unlike the
+    bulletin board it is not buffered to end-of-round: a player's own trades
+    are their own private knowledge, so (like live inventory) they are
+    visible to them immediately.
  
     negotiation_fn(player, partner, negotiation_history, turn_index,
                    round_index, pair_id) -> dict
@@ -462,6 +473,7 @@ def run_pair_negotiation(
             round_index=round_index,
             pair_id=pair_id,
             display_order=display_order,
+            trade_history=(trade_history or {}).get(current.id),
         )
  
         msg_record = {
@@ -591,6 +603,7 @@ def run_pair_negotiation(
                 partner_name=current.display_name,
                 negotiation_history=negotiation_history,
                 display_order=display_order,
+                trade_history=(trade_history or {}).get(other.id),
             )
             decision = commitment["decision"]
             reasoning = commitment.get("reasoning_summary", "")
@@ -730,6 +743,7 @@ def run_round(
             negotiation_fn=negotiation_fn,
             commitment_fn=commitment_fn,
             display_order=display_order,
+            trade_history=trade_history,
         )
  
         if pair_result["trade_accepted"]:
@@ -973,16 +987,28 @@ def effective_broadcast(exp_cfg: Any, num_players: int, round_index: int) -> boo
     """
     Whether the market bulletin should be shown/recorded for this round or
     probe. Same as mechanism.broadcast_completed_trades, except forced off
-    during washout rounds when washout.disable_broadcast is set — even
-    though the underlying mechanism config is unchanged for the rest of the
-    run. round_index=0 (pre-run) and -1 (post-run) never fall in the
-    washout block, so they're unaffected.
+    in two cases:
+
+    1. round_index=0 — the pre-run baseline. Nothing has been traded yet, so
+       the only thing a board could carry there is the fixed
+       prompts.static_broadcast_message. Showing it would mean the baseline
+       measurement is already taken under the broadcast framing, leaving
+       nothing uncontaminated to measure drift *from*. Both round-0 prompt
+       kinds are covered: the pre-run preference probe and the shadow-trade
+       battery that fires alongside it (both labelled "pre_run").
+    2. washout rounds, when washout.disable_broadcast is set — even though
+       the underlying mechanism config is unchanged for the rest of the run.
+
+    round_index=-1 (post-run) is deliberately NOT forced off: by then the
+    market has actually happened, so the board is real history.
 
     prompts.static_broadcast_message rides on this same gate (see
     resolve_board_history): it only appears when broadcast_completed_trades
     is on, it does not turn broadcast on by itself.
     """
     base_broadcast = bool(exp_cfg.mechanism.broadcast_completed_trades)
+    if round_index == 0:
+        return False
     washout_cfg = exp_cfg.washout
     if (
         base_broadcast
@@ -1485,7 +1511,8 @@ def run_llm_experiment(cfg: LoadedConfig, provider_id: str) -> RunLogger:
         return effective_broadcast(exp_cfg, num_players, round_index)
 
     def negotiation_fn(player, partner, negotiation_history, turn_index,
-                       round_index, pair_id, display_order=None):
+                       round_index, pair_id, display_order=None,
+                       trade_history=None):
         # Patch player.inventory so prompt_render sees the live state
         player.inventory = live_inv[player.id]
         round_broadcast = _round_broadcast(round_index)
@@ -1503,13 +1530,14 @@ def run_llm_experiment(cfg: LoadedConfig, provider_id: str) -> RunLogger:
             pair_id=pair_id,
             display_order=display_order,
             action_space=exp_cfg.mechanism.action_space,
+            trade_history=trade_history,
             board_history=resolve_board_history(prompts, bulletin_board) if round_broadcast else None,
             broadcast=round_broadcast,
         )
 
     def commitment_fn(player, proposed_trade, round_index, pair_id,
                       partner_name="your partner", negotiation_history=None,
-                      display_order=None):
+                      display_order=None, trade_history=None):
         player.inventory = live_inv[player.id]
         round_broadcast = _round_broadcast(round_index)
         return gpt_commitment_decision(
@@ -1525,6 +1553,7 @@ def run_llm_experiment(cfg: LoadedConfig, provider_id: str) -> RunLogger:
             display_order=display_order,
             partner_name=partner_name,
             negotiation_history=negotiation_history,
+            trade_history=trade_history,
             board_history=resolve_board_history(prompts, bulletin_board) if round_broadcast else None,
             broadcast=round_broadcast,
         )
@@ -1551,7 +1580,8 @@ def run_llm_experiment(cfg: LoadedConfig, provider_id: str) -> RunLogger:
             broadcast=broadcast,
         )
 
-    def shadow_commitment_fn(player, proposed_trade, round_index, shadow_id, display_order=None):
+    def shadow_commitment_fn(player, proposed_trade, round_index, shadow_id,
+                             display_order=None, trade_history=None):
         # Same prompt shape as a real commitment decision, generic
         # fictitious partner, tagged "shadow_commitment" in the logs so it is
         # never conflated with a real commitment decision.
@@ -1570,6 +1600,7 @@ def run_llm_experiment(cfg: LoadedConfig, provider_id: str) -> RunLogger:
             display_order=display_order,
             partner_name="another trader in the market",
             negotiation_history=None,
+            trade_history=trade_history,
             board_history=resolve_board_history(prompts, bulletin_board) if round_broadcast else None,
             broadcast=round_broadcast,
             prompt_type="shadow_commitment",
@@ -1886,7 +1917,8 @@ def run_probe_only_experiment(
         p.id: [] for p in players
     }
 
-    def shadow_commitment_fn(player, proposed_trade, round_index, shadow_id, display_order=None):
+    def shadow_commitment_fn(player, proposed_trade, round_index, shadow_id,
+                             display_order=None, trade_history=None):
         return gpt_commitment_decision(
             player=player,
             prompts=prompts,
@@ -1900,6 +1932,7 @@ def run_probe_only_experiment(
             display_order=display_order,
             partner_name="another trader in the market",
             negotiation_history=None,
+            trade_history=trade_history,
             board_history=None,
             broadcast=False,
             prompt_type="shadow_commitment",

@@ -479,6 +479,7 @@ def gpt_commitment_decision(
     display_order: List[str],
     partner_name: str = "your partner",
     negotiation_history: Optional[List[Dict[str, Any]]] = None,
+    trade_history: Optional[List[Mapping[str, Any]]] = None,
     board_history: Optional[List[str]] = None,
     broadcast: bool = False,
     prompt_type: str = "commitment",
@@ -504,6 +505,7 @@ def gpt_commitment_decision(
         round_index=round_index,
         partner_name=partner_name,
         negotiation_history=negotiation_history,
+        trade_history=trade_history,
         board_history=board_history,
         broadcast=broadcast,
     )
