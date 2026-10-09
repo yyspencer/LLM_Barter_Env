@@ -5,10 +5,8 @@ Anthropic Claude provider wrapper for the LLM barter experiment.
 
 Same responsibilities as openai_agent.py / gemini_agent.py, but talks to the
 Anthropic Messages API (Claude Sonnet 5) instead:
-  - Calling the Messages API, with structured output for the preference
-    probe implemented via forced tool use (Anthropic has no OpenAI/Gemini-
-    style response_format/response_schema knob — a forced tool call is the
-    standard way to get schema-conformant JSON out of Claude)
+  - Calling the Messages API, with schema-constrained JSON output
+    (output_config.format) for negotiation, commitment and probe calls
   - JSON parsing with best-effort repair for common model output issues
     (reuses openai_agent's parser/validators — that logic is provider-agnostic,
     so fixes made there automatically apply here too)
@@ -29,7 +27,6 @@ passing an anthropic.Anthropic client instead.
 
 from __future__ import annotations
 
-import json
 import time
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
@@ -60,7 +57,13 @@ from prompt_render import (
 
 DEFAULT_MODEL = "claude-sonnet-5"
 
-_TOOL_NAME = "submit_response"
+# Reasoning effort for adaptive thinking: low | medium | high | xhigh | max.
+_EFFORT = "medium"
+
+# Extra max_tokens reserved for thinking, on top of the caller's max_tokens.
+# Matches gemini_agent.py's _THINKING_BUDGET so both providers get the same
+# total (thinking + visible answer) for a given models.yaml max_tokens.
+_THINKING_HEADROOM = 1000
 
 
 # ---------------------------------------------------------------------------
@@ -116,8 +119,8 @@ def _call_claude(
     """
     Call the Anthropic Messages API with retry on transient errors.
 
-    When response_schema is given, forces a tool call shaped by that schema
-    and returns the tool input re-serialized as a JSON string, so callers can
+    When response_schema is given, the reply is constrained to JSON matching
+    that schema (output_config.format) and returned as text, so callers can
     feed it through the same parse_json_response() pipeline used everywhere
     else regardless of provider.
 
@@ -158,45 +161,41 @@ def _call_claude(
     # in this function's signature for interface parity with the other two
     # provider modules, but is intentionally not forwarded to the API.
     #
-    # It also reasons by default (adaptive thinking) even when we never asked
-    # for it — thinking tokens draw from the same max_tokens ceiling as the
-    # visible answer, same failure mode as Gemini 3.1 Pro's thinking budget,
-    # except here there is no numeric budget to reserve against (only a
-    # qualitative "effort" level with no hard cap), so a bounded reserve
-    # can't guarantee no truncation on longer, later-round prompts. We
-    # disable thinking outright instead: max_tokens then means exactly what
-    # it says, matching the other two provider modules.
+    # Thinking is on (adaptive, at _EFFORT) so Claude can reason privately
+    # before answering, like the other two providers. With it disabled the
+    # model did its reasoning out loud inside message_to_partner, which
+    # produced trade-less offers and leaked tool-call markup into the message.
+    # Thinking tokens draw from the same max_tokens ceiling as the visible
+    # answer, and this model accepts no numeric thinking budget (only the
+    # qualitative effort level), so _THINKING_HEADROOM is added on top. The
+    # total then matches gemini_agent.py, but unlike Gemini's thinking_budget
+    # the split is not enforced: a long think can use the answer's share.
+    output_config: Dict[str, Any] = {"effort": _EFFORT}
+    if response_schema is not None:
+        # Schema-constrained JSON text rather than a forced tool call: the
+        # schema guarantee is the same (a required field such as
+        # proposed_trade cannot be dropped), but a forced tool call
+        # suppresses thinking entirely.
+        output_config["format"] = {"type": "json_schema", "schema": response_schema}
     kwargs: Dict[str, Any] = {
         "model": model,
-        "max_tokens": max_tokens,
+        "max_tokens": max_tokens + _THINKING_HEADROOM,
         "messages": claude_messages,
         "timeout": timeout,
-        "thinking": {"type": "disabled"},
+        "thinking": {"type": "adaptive"},
+        "output_config": output_config,
     }
     if system_prompt is not None:
         # system_prompt (game rules + persona) depends only on player and
         # display_order, both fixed for the whole run — byte-identical
         # across every call this player makes. Cache it: everything up to
-        # and including this block (tools + system) becomes a cache hit on
-        # this player's next call of the same type, instead of full-price
-        # input tokens.
+        # and including this block becomes a cache hit on this player's
+        # next call of the same type, instead of full-price input tokens.
         kwargs["system"] = [{
             "type": "text",
             "text": system_prompt,
             "cache_control": {"type": "ephemeral"},
         }]
-    if response_schema is not None:
-        # input_schema depends only on display_order (fixed for the run),
-        # so it's identical across every negotiation/commitment/probe call
-        # regardless of player — a separate, wider-hit-rate breakpoint than
-        # the per-player system prompt above.
-        kwargs["tools"] = [{
-            "name": _TOOL_NAME,
-            "description": "Submit the structured response for this turn.",
-            "input_schema": response_schema,
-            "cache_control": {"type": "ephemeral"},
-        }]
-        kwargs["tool_choice"] = {"type": "tool", "name": _TOOL_NAME}
 
     last_exc: Optional[Exception] = None
 
@@ -204,13 +203,13 @@ def _call_claude(
         try:
             response = client.messages.create(**kwargs)
 
-            if response_schema is not None:
-                for block in response.content:
-                    if block.type == "tool_use" and block.name == _TOOL_NAME:
-                        return json.dumps(block.input)
-                raise RuntimeError(
-                    "Claude did not return the expected tool call for a "
-                    "structured response."
+            if response.stop_reason == "max_tokens":
+                # Thinking used up the ceiling before the answer finished.
+                # The partial/empty text fails parsing downstream, which
+                # triggers call_until_parsed's re-ask.
+                print(
+                    f"  [claude_agent] Response cut off at max_tokens "
+                    f"({response.usage.output_tokens} output tokens)."
                 )
 
             return "".join(
@@ -243,7 +242,7 @@ def _call_claude(
 def _build_probe_schema(display_order: List[str]) -> Dict[str, Any]:
     """
     Build a JSON Schema for the probe with goods in the given display order,
-    used as the input_schema of the forced tool call.
+    used as the output_config.format schema.
     """
     def _int_object(order: List[str]) -> Dict[str, Any]:
         return {
@@ -276,22 +275,24 @@ _NEGOTIATION_ACTION_TYPES = [
 
 def _build_negotiation_schema(display_order: List[str]) -> Dict[str, Any]:
     """
-    Build a JSON Schema for a negotiation turn, used as the input_schema of
-    the forced tool call. Mirrors the fields _validate_negotiation_response
-    (openai_agent.py) requires/defaults, so a schema-conformant tool call
+    Build a JSON Schema for a negotiation turn, used as the
+    output_config.format schema. Mirrors the fields _validate_negotiation_response
+    (openai_agent.py) requires/defaults, so a schema-conformant reply
     always passes validation without falling through to the parse-error path.
 
     proposed_trade's give/receive sides allow *any subset* of display_order
-    with nonnegative quantities (not "all goods required") — validate_trade
-    (runner.py) is what enforces action-space-specific shape rules (e.g.
-    one_for_one's exactly-one-good-each-side, any_bundle's no restriction),
-    so the schema only needs to be permissive enough to cover every
-    configured action_space, not encode one specific one.
+    with integer quantities (not "all goods required") — validate_trade
+    (runner.py) is what enforces nonnegative quantities and the
+    action-space-specific shape rules (e.g. one_for_one's
+    exactly-one-good-each-side, any_bundle's no restriction), so the schema
+    only needs to be permissive enough to cover every configured
+    action_space, not encode one specific one. No "minimum" here:
+    structured-output schemas do not support numeric constraints.
     """
     def _trade_side() -> Dict[str, Any]:
         return {
             "type": "object",
-            "properties": {g: {"type": "integer", "minimum": 0} for g in display_order},
+            "properties": {g: {"type": "integer"} for g in display_order},
             "additionalProperties": False,
         }
 
@@ -331,7 +332,7 @@ def _build_negotiation_schema(display_order: List[str]) -> Dict[str, Any]:
 def _build_commitment_schema() -> Dict[str, Any]:
     """
     Build a JSON Schema for a commitment (accept/reject) decision, used as
-    the input_schema of the forced tool call. Mirrors the fields
+    the output_config.format schema. Mirrors the fields
     _validate_commitment_response (openai_agent.py) requires.
     """
     return {

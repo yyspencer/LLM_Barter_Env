@@ -211,8 +211,13 @@ def call_until_parsed(
 _RETRYABLE = (APITimeoutError, APIConnectionError, RateLimitError)
 _MAX_RETRIES = 3
 _BASE_BACKOFF = 2.0   # seconds; doubles each retry
- 
- 
+
+# Reasoning effort: none | low | medium | high | xhigh. Pinned explicitly
+# (rather than left to the model's default) so the condition can't shift if
+# that default changes; matches claude_agent.py's _EFFORT.
+_REASONING_EFFORT = "medium"
+
+
 def _call_openai(
     client: OpenAI,
     messages: List[Dict[str, str]],
@@ -239,6 +244,7 @@ def _call_openai(
                 max_completion_tokens=max_completion_tokens,
                 timeout=timeout,
                 response_format=response_format,
+                reasoning_effort=_REASONING_EFFORT,
             )
             return response.choices[0].message.content or ""
  
@@ -288,6 +294,15 @@ def _validate_negotiation_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
  
     parsed.setdefault("proposed_trade", None)
     parsed.setdefault("accept_trade", None)
+
+    # Drop zero-quantity goods ({"A": 1, "B": 0} -> {"A": 1}) so a trade
+    # reads the same in prompts and logs however the model wrote it (some
+    # schema-constrained outputs list every good on each side).
+    trade = parsed["proposed_trade"]
+    if isinstance(trade, dict):
+        for side in ("give", "receive"):
+            if isinstance(trade.get(side), dict):
+                trade[side] = {g: q for g, q in trade[side].items() if q != 0}
 
     # An offer/counteroffer with no proposed_trade does nothing in the
     # runner (no commitment phase), so re-ask rather than waste the turn.
