@@ -1,0 +1,782 @@
+
+[DISPLAY ORDER for this run: C, A, B]
+STARTING INVENTORIES AND UTILITIES
+============================================================
+  Agent 1 (player_1): inv={'A': 1, 'B': 0, 'C': 3}, U=1.8661
+  Agent 2 (player_2): inv={'A': 1, 'B': 0, 'C': 3}, U=1.8661
+  Agent 3 (player_3): inv={'A': 3, 'B': 1, 'C': 0}, U=1.8661
+  Agent 4 (player_4): inv={'A': 3, 'B': 1, 'C': 0}, U=1.8661
+  Agent 5 (player_5): inv={'A': 1, 'B': 1, 'C': 1}, U=1.9862
+  Agent 6 (player_6): inv={'A': 1, 'B': 1, 'C': 1}, U=1.9862
+
+[PRE-RUN PREFERENCE PROBES]
+[PROBE pre_run] Agent 1:
+    current_inventory={'A': 1, 'B': 0, 'C': 3}
+    predicted_marginal_utility={'A': 0.6124451694608375, 'B': 0.2774809419989719, 'C': 0.042108119583729176}
+    ratings_inventory={'C': 3, 'A': 8, 'B': 7}
+    ratings_general={'C': 3, 'A': 9, 'B': 6}
+    desired_bundle={'C': 1, 'A': 3, 'B': 2}
+[PROBE pre_run] Agent 2:
+    current_inventory={'A': 1, 'B': 0, 'C': 3}
+    predicted_marginal_utility={'A': 0.6124451694608375, 'B': 0.2774809419989719, 'C': 0.042108119583729176}
+    ratings_inventory={'C': 3, 'A': 8, 'B': 9}
+    ratings_general={'C': 3, 'A': 9, 'B': 7}
+    desired_bundle={'C': 1, 'A': 3, 'B': 2}
+[PROBE pre_run] Agent 3:
+    current_inventory={'A': 3, 'B': 1, 'C': 0}
+    predicted_marginal_utility={'A': 0.042108119583729176, 'B': 0.6124451694608375, 'C': 0.2774809419989719}
+    ratings_inventory={'C': 8, 'A': 4, 'B': 9}
+    ratings_general={'C': 6, 'A': 4, 'B': 8}
+    desired_bundle={'C': 2, 'A': 1, 'B': 3}
+[PROBE pre_run] Agent 4:
+    current_inventory={'A': 3, 'B': 1, 'C': 0}
+    predicted_marginal_utility={'A': 0.042108119583729176, 'B': 0.6124451694608375, 'C': 0.2774809419989719}
+    ratings_inventory={'C': 8, 'A': 4, 'B': 9}
+    ratings_general={'C': 6, 'A': 4, 'B': 9}
+    desired_bundle={'C': 2, 'A': 1, 'B': 3}
+[SHADOW pre_run] Agent 5: acquire offer — give 1×A, receive 1×B => reject
+[SHADOW pre_run] Agent 5: surrender offer — give 1×B, receive 1×A => reject
+[SHADOW pre_run] Agent 5: surrender offer — give 1×B, receive 2×A => reject
+[SHADOW pre_run] Agent 5: acquire offer — give 1×C, receive 1×B => reject
+[SHADOW pre_run] Agent 5: surrender offer — give 1×B, receive 1×C => reject
+[SHADOW pre_run] Agent 5: surrender offer — give 1×B, receive 2×C => reject
+[PROBE pre_run] Agent 5:
+    current_inventory={'A': 1, 'B': 1, 'C': 1}
+    predicted_marginal_utility={'A': 0.2843584280268796, 'B': 0.2843584280268796, 'C': 0.28435842802688005}
+    ratings_inventory={'C': 5, 'A': 5, 'B': 5}
+    ratings_general={'C': 5, 'A': 5, 'B': 5}
+    desired_bundle={'C': 2, 'A': 2, 'B': 2}
+[SHADOW pre_run] Agent 6: acquire offer — give 1×A, receive 1×B => reject
+[SHADOW pre_run] Agent 6: surrender offer — give 1×B, receive 1×A => reject
+[SHADOW pre_run] Agent 6: surrender offer — give 1×B, receive 2×A => reject
+[SHADOW pre_run] Agent 6: acquire offer — give 1×C, receive 1×B => reject
+[SHADOW pre_run] Agent 6: surrender offer — give 1×B, receive 1×C => reject
+[SHADOW pre_run] Agent 6: surrender offer — give 1×B, receive 2×C => reject
+[PROBE pre_run] Agent 6:
+    current_inventory={'A': 1, 'B': 1, 'C': 1}
+    predicted_marginal_utility={'A': 0.2843584280268796, 'B': 0.2843584280268796, 'C': 0.28435842802688005}
+    ratings_inventory={'C': 5, 'A': 5, 'B': 5}
+    ratings_general={'C': 5, 'A': 5, 'B': 5}
+    desired_bundle={'C': 2, 'A': 2, 'B': 2}
+
+[WASHOUT ENABLED: 4 extra rounds appended (rounds 11-14). Broadcast disabled for these rounds: True. Washout probes scheduled after rounds: [12, 14]]
+
+============================================================
+ROUND 1
+============================================================
+
+Pair: Agent 1 vs Agent 3 [round_1_player_1_vs_player_3]
+  Agent 1 inventory: {'A': 1, 'B': 0, 'C': 3}
+  Agent 3 inventory: {'A': 3, 'B': 1, 'C': 0}
+  Turn 1 [Agent 1] (offer): Hi! I have extra C and could use some A and B. Would you trade 1 A and 1 B for 2 C?
+  [COMMITMENT] Agent 3: reject — Giving up my only B (most valuable, but my sole unit) for just A-weak and C is bad; losing my only B unit drops significant utility since B is most important to me. I'd rather keep B and only trade A for C.
+  Turn 2 [Agent 3] (counteroffer): I'd rather keep my B. I can trade 2 A for 2 C instead - that frees up your A need while I get C I lack entirely.
+  [COMMITMENT] Agent 1: accept — Gaining 2 A boosts my most valued good significantly (from 1 to 3), while giving up 2 of my 3 C, which I value weakly. This improves my utility despite diminishing returns on A.
+  TRADE ACCEPTED: give={'A': 2}, receive={'C': 2}
+  Agent 1: {'A': 1, 'B': 0, 'C': 3} → {'A': 3, 'B': 0, 'C': 1} (utility 1.8661 → 2.8284)
+  Agent 3: {'A': 3, 'B': 1, 'C': 0} → {'A': 1, 'B': 1, 'C': 2} (utility 1.8661 → 2.1689)
+
+Pair: Agent 6 vs Agent 4 [round_1_player_6_vs_player_4]
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Agent 4 inventory: {'A': 3, 'B': 1, 'C': 0}
+  Turn 1 [Agent 6] (message): Hi! I have equal amounts of C, A, and B (1 each). I value variety, so I'd like to trade for whichever good you have surplus of. What's your inventory like?
+  Turn 2 [Agent 4] (offer): I have surplus A (3 units) and no C, with just 1 B. I'd like to trade 2 A for your 1 C and 1 B.
+  [COMMITMENT] Agent 6: reject — This trade would leave me with 3 A, 0 C, 0 B, eliminating variety which I value. I'd rather keep a balanced bundle or negotiate a smaller trade that preserves some of each good.
+  Turn 3 [Agent 6] (no_trade): Since you have no C and limited B, I don't think we can find a trade that keeps my inventory balanced without sacrificing a full good type. I'll pass for now, but thanks for the offer!
+  NO TRADE: Agent 6 chose no_trade
+
+Pair: Agent 2 vs Agent 5 [round_1_player_2_vs_player_5]
+  Agent 2 inventory: {'A': 1, 'B': 0, 'C': 3}
+  Agent 5 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Turn 1 [Agent 2] (offer): Hi! I have surplus C and no B. I'll give you 2 units of C for 1 unit of A, or if you have B, I'd prefer 2 C for 1 B. What works for you?
+  [COMMITMENT] Agent 5: reject — Giving away my only B unit would eliminate that good entirely from my inventory, while stacking C to 3 units reduces marginal value due to my preference for variety. This trade decreases my overall utility.
+  Turn 2 [Agent 5] (message): I appreciate the offer, but since I value variety, I don't want to give up my only B or A for more C. Do you have anything else to trade, like B or A, instead of C? Otherwise I think we don't have a good match right now.
+  Turn 3 [Agent 2] (offer): Understood on variety. How about a smaller trade: I give 1 C for 1 B? That keeps your A intact and only trims your C surplus concern slightly while giving you an extra C without losing your only B's importance much.
+  [COMMITMENT] Agent 5: reject — Trading away my only B would eliminate that good entirely, reducing variety, while increasing C from 1 to 2 only marginally helps. This decreases my overall utility since I value having all three goods.
+  Turn 4 [Agent 5] (no_trade): Thanks for working with me, but since you only have surplus C and I'd need to give up my only A or B to get it, this doesn't work well for my goals right now. I'll pass on trading with you this round.
+  NO TRADE: Agent 5 chose no_trade
+
+============================================================
+ROUND 2
+============================================================
+
+Pair: Agent 1 vs Agent 4 [round_2_player_1_vs_player_4]
+  Agent 1 inventory: {'A': 3, 'B': 0, 'C': 1}
+  Agent 4 inventory: {'A': 3, 'B': 1, 'C': 0}
+  Turn 1 [Agent 1] (offer): I have surplus C and A, and I'm looking for B. I'll give you 1 C and 1 A for 2 B.
+  [INVALID TRADE from Agent 1: Responder player_4 cannot give 2×B (has 1)]
+  Turn 2 [Agent 4] (counteroffer): I only have 1 B and want to keep it. Instead, I'll trade you 1 A for 1 C.
+  [COMMITMENT] Agent 1: reject — I already have 3 A with diminishing returns, and giving up my only C for another A isn't beneficial. I'd rather keep C for trade toward B, which I lack entirely.
+  Turn 3 [Agent 1] (offer): How about a simple swap: I'll give you 1 C for your 1 B? That way you keep all your A, and I get the B I need.
+  [COMMITMENT] Agent 4: reject — B is my most valued good and I only have 1 unit; giving it up entirely for a single C would leave me with no B, which hurts my utility more than gaining one C helps. I'd rather keep my only B and seek a trade involving A instead.
+  Turn 4 [Agent 4] (counteroffer): I'd rather keep my B. Instead, I'll give you 2 A for 1 C - that helps you offload A pressure and gets me the C I need.
+  [COMMITMENT] Agent 1: reject — I already have 3 A with diminishing returns, and giving up my only C (which I could use for B) for 2 more A isn't worth it since it leaves me with 0 C and still no B. I'd rather hold my C to negotiate for B instead.
+  Turn 5 [Agent 1] (offer): Alright, I'll agree to swap: I'll give you my 1 C for your 2 A.
+  [COMMITMENT] Agent 4: accept — I gain C which I currently lack (valuable since I have 0), and I give up 2 A which has only weak value to me and I still retain 1 A. This improves my bundle while keeping my B intact.
+  TRADE ACCEPTED: give={'C': 1}, receive={'A': 2}
+  Agent 1: {'A': 3, 'B': 0, 'C': 1} → {'A': 5, 'B': 0, 'C': 0} (utility 2.8284 → 3.5051)
+  Agent 4: {'A': 3, 'B': 1, 'C': 0} → {'A': 1, 'B': 1, 'C': 1} (utility 1.8661 → 2.0000)
+
+Pair: Agent 3 vs Agent 5 [round_2_player_3_vs_player_5]
+  Agent 3 inventory: {'A': 1, 'B': 1, 'C': 2}
+  Agent 5 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Turn 1 [Agent 3] (offer): I'd like to trade 1 C and 1 A for 2 B, if you have them to spare.
+  [INVALID TRADE from Agent 3: Responder player_5 cannot give 2×B (has 1)]
+  Turn 2 [Agent 5] (counteroffer): I only have 1 B, so I can't do 2. But I could offer 1 B for 1 C, keeping things balanced.
+  [COMMITMENT] Agent 3: accept — B is my top priority good and doubling my B holdings (from 1 to 2) is valuable even with diminishing returns, while giving up 1 C still leaves me with 1 C, which is acceptable since I value B more highly than an extra C.
+  TRADE ACCEPTED: give={'B': 1}, receive={'C': 1}
+  Agent 3: {'A': 1, 'B': 1, 'C': 2} → {'A': 1, 'B': 2, 'C': 1} (utility 2.1689 → 2.6564)
+  Agent 5: {'A': 1, 'B': 1, 'C': 1} → {'A': 1, 'B': 0, 'C': 2} (utility 1.9862 → 1.8063)
+
+Pair: Agent 6 vs Agent 2 [round_2_player_6_vs_player_2]
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Agent 2 inventory: {'A': 1, 'B': 0, 'C': 3}
+  Turn 1 [Agent 6] (message): Hi! I currently have equal amounts of C, A, and B. What are you looking for? I'm open to trading to get a more balanced or advantageous mix.
+  Turn 2 [Agent 2] (offer): I have plenty of C but need A and B. I'll give you 2 C for 1 A and 1 B.
+  [COMMITMENT] Agent 6: reject — This trade would leave me with 3 C, 0 A, 0 B, which is extremely unbalanced and loses variety value. I prefer to keep a diversified bundle rather than trade away all my A and B for more C.
+  Turn 3 [Agent 6] (counteroffer): I'd rather keep my variety balanced. How about I give you just 1 C for 1 A instead of both A and B? That keeps things fairer for me.
+  [COMMITMENT] Agent 2: reject — This would leave me with 0 A, losing my most valuable good entirely, just to gain 1 more C which I already have plenty of. I need to acquire A and B, not give away my only A.
+  Turn 4 [Agent 2] (offer): I'd rather keep my A since it's my most valuable good. How about I give you 2 C for 1 B instead? That way you get extra C and I get the B I need.
+  [COMMITMENT] Agent 6: reject — This trade would leave me with 3 C, 1 A, 0 B - losing my B entirely and creating a heavily skewed bundle. I value variety, so going from (1,1,1) to (3,1,0) decreases my utility despite gaining more total goods.
+  Turn 5 [Agent 6] (no_trade): Thanks for negotiating, but trading away my A or B for more C would hurt my balanced bundle. I'll pass on further trades for now.
+  NO TRADE: Agent 6 chose no_trade
+
+============================================================
+ROUND 3
+============================================================
+
+Pair: Agent 1 vs Agent 5 [round_3_player_1_vs_player_5]
+  Agent 1 inventory: {'A': 5, 'B': 0, 'C': 0}
+  Agent 5 inventory: {'A': 1, 'B': 0, 'C': 2}
+  Turn 1 [Agent 1] (offer): I have plenty of A but no B or C. I'll trade 2 units of A for 2 units of B if you have some to spare.
+  [INVALID TRADE from Agent 1: Responder player_5 cannot give 2×B (has 0)]
+  Turn 2 [Agent 5] (message): I don't have any B to trade right now. I do have surplus C though - would you trade some A for C instead? For example, 1C for 1A?
+  Turn 3 [Agent 1] (counteroffer): I'd rather not do a straight 1-for-1 since A is quite valuable to me. I could do 1×A for 2×C instead.
+  [COMMITMENT] Agent 5: reject — Giving up all my C (2 units) for just 1 A would leave me with zero C and more A, hurting variety. I'd rather keep some C or find a better ratio like 1C for 1A.
+  Turn 4 [Agent 5] (counteroffer): Let's meet in the middle - I'll give 1.5... actually let's do 2C for 1A isn't great for me. How about 1C for 1A? If not, I could also do 3C for 2A to balance it a bit.
+  [COMMITMENT] Agent 1: reject — I have 5 A already with diminishing marginal value, and C is only weakly useful. Trading 1 A for just 1 C is a poor ratio - I'd rather hold out for 2C per A or trade A for B instead.
+  Turn 5 [Agent 1] (offer): Deal - I'll give 2×A for 3×C.
+  [INVALID TRADE from Agent 1: Responder player_5 cannot give 3×C (has 2)]
+  Turn 6 [Agent 5] (counteroffer): I only have 2 C total, so I can't do 3C. Let's do 2×C for 1×A instead - that's my best offer.
+  [COMMITMENT] Agent 1: accept — I have 5 A with diminishing marginal value, so giving up 1 A for 2 C is a reasonable trade since C still has some value and this is the best ratio Agent 5 can offer given their limited stock.
+  TRADE ACCEPTED: give={'C': 2}, receive={'A': 1}
+  Agent 1: {'A': 5, 'B': 0, 'C': 0} → {'A': 4, 'B': 0, 'C': 2} (utility 3.5051 → 3.4434)
+  Agent 5: {'A': 1, 'B': 0, 'C': 2} → {'A': 2, 'B': 0, 'C': 0} (utility 1.8063 → 1.4370)
+
+Pair: Agent 4 vs Agent 2 [round_3_player_4_vs_player_2]
+  Agent 4 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Agent 2 inventory: {'A': 1, 'B': 0, 'C': 3}
+  Turn 1 [Agent 4] (offer): I'll give you 1 unit of A for 1 unit of B - I value B highly and have little need for A.
+  [INVALID TRADE from Agent 4: Responder player_2 cannot give 1×B (has 0)]
+  Turn 2 [Agent 2] (offer): I don't have any B to trade, but I do have extra C. I'll give you 2 units of C for 1 unit of A.
+  [COMMITMENT] Agent 4: accept — Giving up my only A (weakly useful) for 2 C (moderately useful, I only have 1) is a good trade since I keep my B intact and boost my C holdings significantly.
+  TRADE ACCEPTED: give={'C': 2}, receive={'A': 1}
+  Agent 4: {'A': 1, 'B': 1, 'C': 1} → {'A': 0, 'B': 1, 'C': 3} (utility 2.0000 → 2.1435)
+  Agent 2: {'A': 1, 'B': 0, 'C': 3} → {'A': 2, 'B': 0, 'C': 1} (utility 1.8661 → 2.3125)
+
+Pair: Agent 3 vs Agent 6 [round_3_player_3_vs_player_6]
+  Agent 3 inventory: {'A': 1, 'B': 2, 'C': 1}
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Turn 1 [Agent 3] (offer): I'd like to trade my spare A for another B if you have one to spare. I can offer 1 A for 1 B.
+  [COMMITMENT] Agent 6: reject — This trade would give me 2 A and 0 B, reducing variety instead of improving it. I'd rather keep balanced holdings of 1 each or increase my least-held good, not deplete B entirely.
+  Turn 2 [Agent 6] (no_trade): I already have an even 1-1-1 split, so trading away any single good would hurt my variety. I'll pass for now, but thanks for the offer!
+  NO TRADE: Agent 6 chose no_trade
+
+============================================================
+ROUND 4
+============================================================
+
+Pair: Agent 1 vs Agent 2 [round_4_player_1_vs_player_2]
+  Agent 1 inventory: {'A': 4, 'B': 0, 'C': 2}
+  Agent 2 inventory: {'A': 2, 'B': 0, 'C': 1}
+  Turn 1 [Agent 1] (offer): I have surplus C and A, looking for B. I'll give 1 C and 1 A for 2 B.
+  [INVALID TRADE from Agent 1: Responder player_2 cannot give 2×B (has 0)]
+  Turn 2 [Agent 2] (counteroffer): I don't have any B to trade either. But I could offer 1 C for 1 A if you're interested, since you have surplus of both.
+  [COMMITMENT] Agent 1: reject — I have 4 A already with diminishing value, and B is what I need most. Trading A away for C doesn't help since I value A highly and C is only weakly useful. I'd rather hold onto A and seek B instead.
+  Turn 3 [Agent 1] (no_trade): Since neither of us has B to trade, and I don't want to give up A for C, let's end this negotiation here.
+  NO TRADE: Agent 1 chose no_trade
+
+Pair: Agent 5 vs Agent 6 [round_4_player_5_vs_player_6]
+  Agent 5 inventory: {'A': 2, 'B': 0, 'C': 0}
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Turn 1 [Agent 5] (offer): I have 2 A and nothing else. I'd like to diversify - could you give me 1 C and 1 B for 1 A?
+  [COMMITMENT] Agent 6: reject — Trading away my only C and B for a second A would leave me with 0 C, 0 B, and 2 A, drastically reducing variety which I value. This hurts my utility rather than helping it.
+  Turn 2 [Agent 6] (no_trade): Since you only have A, any trade would require me to give up C or B, which would hurt my balance since I already have one of each. I'll pass this round.
+  NO TRADE: Agent 6 chose no_trade
+
+Pair: Agent 4 vs Agent 3 [round_4_player_4_vs_player_3]
+  Agent 4 inventory: {'A': 0, 'B': 1, 'C': 3}
+  Agent 3 inventory: {'A': 1, 'B': 2, 'C': 1}
+  Turn 1 [Agent 4] (offer): I have surplus C and could use more B. Would you trade 2 units of B for 2 units of C?
+  [COMMITMENT] Agent 3: reject — Giving up all my B (my most valued good) for C is too costly; B's marginal value is still significant since I only have 2 units. I'd rather keep B and seek a smaller trade, like 1B for 1-2C.
+  Turn 2 [Agent 3] (counteroffer): I'd rather not give up B. Instead, how about I give you 1 unit of A for 2 units of C? That way you still get rid of surplus C and I keep my B.
+  [COMMITMENT] Agent 4: reject — Giving up 2C for just 1A isn't great since B is my priority and C is still moderately valuable to me; I'd rather negotiate for B or a smaller C trade.
+  Turn 3 [Agent 4] (counteroffer): I hear you on keeping B, but let's meet in the middle — I'll give you 2 units of C for just 1 unit of B. You keep most of your B stock and I get something I value more than A.
+  [COMMITMENT] Agent 3: accept — I keep 1 B (still valuable but with diminishing marginal returns) and gain 2 C, boosting my low C stock significantly, which is a good trade-off.
+  TRADE ACCEPTED: give={'C': 2}, receive={'B': 1}
+  Agent 4: {'A': 0, 'B': 1, 'C': 3} → {'A': 0, 'B': 2, 'C': 1} (utility 2.1435 → 2.4785)
+  Agent 3: {'A': 1, 'B': 2, 'C': 1} → {'A': 1, 'B': 1, 'C': 3} (utility 2.6564 → 2.2974)
+
+============================================================
+ROUND 5
+============================================================
+
+Pair: Agent 1 vs Agent 6 [round_5_player_1_vs_player_6]
+  Agent 1 inventory: {'A': 4, 'B': 0, 'C': 2}
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Turn 1 [Agent 1] (offer): I have no B at all and plenty of A. Would you trade 2 units of C for 2 units of B?
+  [INVALID TRADE from Agent 1: Responder player_6 cannot give 2×B (has 1)]
+  Turn 2 [Agent 6] (message): I only have 1 B total, so I can't give 2. I also don't want to give up my only B since my holdings are already balanced across C, A, and B. If you have any other goods to trade instead of B, let me know.
+  Turn 3 [Agent 1] (offer): Understood. Let's do 1 unit of C for your 1 unit of B.
+  [COMMITMENT] Agent 6: reject — I currently have a perfectly balanced bundle (1 each of C, A, B). Trading away my only B for a second C would give me 2C/1A/0B, which reduces variety and leaves me with nothing in B — a worse outcome under my variety-preferring utility.
+  Turn 4 [Agent 6] (message): I appreciate the offer, but giving up my only B would hurt my balance since I value variety across C, A, and B. I'd rather keep my current balanced set unless you have a trade that doesn't cost me my only unit of any good.
+  Turn 5 [Agent 1] (no_trade): Understood, I won't press further since you want to keep your balanced set. Thanks for the discussion!
+  NO TRADE: Agent 1 chose no_trade
+
+Pair: Agent 2 vs Agent 3 [round_5_player_2_vs_player_3]
+  Agent 2 inventory: {'A': 2, 'B': 0, 'C': 1}
+  Agent 3 inventory: {'A': 1, 'B': 1, 'C': 3}
+  Turn 1 [Agent 2] (offer): Hi! I have a spare C and no B. Would you trade 1 B for my 1 C?
+  [COMMITMENT] Agent 3: reject — I only have 1 B left, which is my most valued good despite diminishing returns. Trading it away for another C (I already have 3) would leave me with 0 B, which is too costly. I'd rather keep my single B and seek trades that don't deplete it.
+  Turn 2 [Agent 3] (message): I'd rather keep my B since it's my top priority good. I already have plenty of C too. Do you have any A to trade instead? I could offer you a C for an A.
+  Turn 3 [Agent 2] (message): I'd rather hold onto my A since it's my top priority good. Would you reconsider trading 1 B for 1 C plus something else, like nothing extra—just straight C for B? I really just want some B to balance my holdings.
+  Turn 4 [Agent 3] (no_trade): I understand, but I can't part with my only B right now. Since you won't trade A either, I don't think we have a deal this round. Maybe next time!
+  NO TRADE: Agent 3 chose no_trade
+
+Pair: Agent 5 vs Agent 4 [round_5_player_5_vs_player_4]
+  Agent 5 inventory: {'A': 2, 'B': 0, 'C': 0}
+  Agent 4 inventory: {'A': 0, 'B': 2, 'C': 1}
+  Turn 1 [Agent 5] (offer): I have A×2 but no C or B. I'll give you 1 A for 1 C and 1 B - helps us both diversify.
+  [COMMITMENT] Agent 4: reject — I only have 1 C left, which is moderately valuable to me, and giving up a B (my most important good) plus my only C for just 1 A (weakly valuable) is a poor trade. I'd rather keep my B and C or negotiate a better deal involving less sacrifice.
+  Turn 2 [Agent 4] (message): I'd rather not give up B or C for just 1 A - that's too costly for me. Could you offer 2 A for 1 C instead? I'd consider that.
+  Turn 3 [Agent 5] (counteroffer): How about 1 A for 1 C instead? That's fair for both of us without needing your B.
+  [COMMITMENT] Agent 4: reject — Giving up my only C (moderately valuable, scarce) for just 1 A (weakly valuable) is a poor trade for me. I'd rather keep my C and continue negotiating for a better deal.
+  Turn 4 [Agent 4] (no_trade): I'd rather hold onto my C for now - the trade doesn't quite work for me. Thanks for negotiating though!
+  NO TRADE: Agent 4 chose no_trade
+
+[MID-RUN PREFERENCE PROBE — after round 5]
+[PROBE round_5] Agent 1:
+    current_inventory={'A': 4, 'B': 0, 'C': 2}
+    predicted_marginal_utility={'A': 0.4687435764396781, 'B': 0.512032222901488, 'C': 0.1004999486924194}
+    ratings_inventory={'C': 3, 'A': 5, 'B': 8}
+    ratings_general={'C': 4, 'A': 9, 'B': 7}
+    desired_bundle={'C': 1, 'A': 3, 'B': 2}
+[PROBE round_5] Agent 2:
+    current_inventory={'A': 2, 'B': 0, 'C': 1}
+    predicted_marginal_utility={'A': 0.5158944495396298, 'B': 0.3438698046801085, 'C': 0.09569201007413186}
+    ratings_inventory={'C': 3, 'A': 6, 'B': 8}
+    ratings_general={'C': 3, 'A': 9, 'B': 6}
+    desired_bundle={'C': 1, 'A': 3, 'B': 2}
+[PROBE round_5] Agent 3:
+    current_inventory={'A': 1, 'B': 1, 'C': 3}
+    predicted_marginal_utility={'A': 0.09506568770856072, 'B': 0.7540084488617902, 'C': 0.10485215796879244}
+    ratings_inventory={'C': 5, 'A': 4, 'B': 8}
+    ratings_general={'C': 6, 'A': 4, 'B': 9}
+    desired_bundle={'C': 2, 'A': 1, 'B': 3}
+[PROBE round_5] Agent 4:
+    current_inventory={'A': 0, 'B': 2, 'C': 1}
+    predicted_marginal_utility={'A': 0.17789132735221624, 'B': 0.5529219804863441, 'C': 0.20936422698783463}
+    ratings_inventory={'C': 6, 'A': 4, 'B': 6}
+    ratings_general={'C': 6, 'A': 3, 'B': 9}
+    desired_bundle={'C': 2, 'A': 1, 'B': 3}
+[SHADOW round_5] Agent 5: acquire offer — give 1×A, receive 1×B => accept
+[SHADOW round_5] Agent 5: acquire offer — give 2×A, receive 1×B => reject
+[PROBE round_5] Agent 5:
+    current_inventory={'A': 2, 'B': 0, 'C': 0}
+    predicted_marginal_utility={'A': 0.14310497154190283, 'B': 0.3693224755004829, 'C': 0.3693224755004829}
+    ratings_inventory={'C': 8, 'A': 4, 'B': 8}
+    ratings_general={'C': 5, 'A': 5, 'B': 5}
+    desired_bundle={'C': 2, 'A': 2, 'B': 2}
+[SHADOW round_5] Agent 6: acquire offer — give 1×A, receive 1×B => reject
+[SHADOW round_5] Agent 6: surrender offer — give 1×B, receive 1×A => reject
+[SHADOW round_5] Agent 6: surrender offer — give 1×B, receive 2×A => reject
+[SHADOW round_5] Agent 6: acquire offer — give 1×C, receive 1×B => reject
+[SHADOW round_5] Agent 6: surrender offer — give 1×B, receive 1×C => reject
+[SHADOW round_5] Agent 6: surrender offer — give 1×B, receive 2×C => reject
+[PROBE round_5] Agent 6:
+    current_inventory={'A': 1, 'B': 1, 'C': 1}
+    predicted_marginal_utility={'A': 0.2843584280268796, 'B': 0.2843584280268796, 'C': 0.28435842802688005}
+    ratings_inventory={'C': 5, 'A': 5, 'B': 5}
+    ratings_general={'C': 5, 'A': 5, 'B': 5}
+    desired_bundle={'C': 2, 'A': 2, 'B': 2}
+
+============================================================
+ROUND 6
+============================================================
+
+Pair: Agent 6 vs Agent 5 [round_6_player_6_vs_player_5]
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Agent 5 inventory: {'A': 2, 'B': 0, 'C': 0}
+  Turn 1 [Agent 6] (message): Hi! I have 1 each of C, A, B. What do you have extra of, and what are you looking for? I'd like to find a trade that helps both of us diversify.
+  Turn 2 [Agent 5] (offer): I have 2×A and nothing else. I'd like to trade 1 A for 1 C and 1 A for 1 B, giving me a diverse set. Specifically: I give you 2 A, you give me 1 C and 1 B.
+  [COMMITMENT] Agent 6: reject — This trade would give me 3 A and 0 C, 0 B, which severely reduces variety - exactly opposite of my preference for balanced holdings. I value diversity across C, A, B, so going to a 3-0-0 split is a big utility loss compared to my current 1-1-1.
+  Turn 3 [Agent 6] (no_trade): Since you only have A to offer, any trade would overload me with A and reduce my diversity. I'll pass this round, thanks!
+  NO TRADE: Agent 6 chose no_trade
+
+Pair: Agent 2 vs Agent 4 [round_6_player_2_vs_player_4]
+  Agent 2 inventory: {'A': 2, 'B': 0, 'C': 1}
+  Agent 4 inventory: {'A': 0, 'B': 2, 'C': 1}
+  Turn 1 [Agent 2] (offer): I have an extra C and could use some B. Would you trade 1 B for my 1 C?
+  [COMMITMENT] Agent 4: reject — I have only 2 B, which is already low and valuable to me due to diminishing but still significant marginal utility. Giving up 1 B for 1 C would reduce my most prized good too much, while C is only moderately useful. I'd rather keep B and seek a trade that doesn't cost me my key resource.
+  Turn 2 [Agent 4] (message): I'd rather hold onto my B for now. Do you have any A you could offer instead, or perhaps give me the C for a smaller good than B?
+  Turn 3 [Agent 2] (offer): How about I give you 1 A for 1 B instead? That keeps your B stock intact in exchange for something you might find useful, and I get a B I could use.
+  [COMMITMENT] Agent 4: reject — I only have 2 B, which is my most valued good. Trading one away for 1 A (only weakly useful) would cost me too much key value. I'd rather keep my B and seek a trade for C or something less costly.
+  Turn 4 [Agent 4] (message): I'd like to keep both my B for now. If you have any C to spare, I could trade something else, like... actually I don't have much extra. Maybe we can find another match later.
+  Turn 5 [Agent 2] (no_trade): Sounds like we can't find a good match right now. Thanks for considering, maybe next round!
+  NO TRADE: Agent 2 chose no_trade
+
+Pair: Agent 1 vs Agent 3 [round_6_player_1_vs_player_3]
+  Agent 1 inventory: {'A': 4, 'B': 0, 'C': 2}
+  Agent 3 inventory: {'A': 1, 'B': 1, 'C': 3}
+  Turn 1 [Agent 1] (offer): I have surplus C and A. I'd like to get some B - can you trade 2 C for 1 B?
+  [COMMITMENT] Agent 3: reject — I only have 1 B left, which is my most valued good. Giving it up for 2 more C (already have 3) would leave me with zero B, which is too costly compared to the marginal value of extra C.
+  Turn 2 [Agent 3] (counteroffer): I'd rather keep my B since it's scarce for me. Instead, how about I give you 1 C for 1 A?
+  [COMMITMENT] Agent 1: reject — I already have 4 A with diminishing marginal value, and I have no B. Trading away A for C doesn't help me - I'd rather keep A or seek B instead. C is only weakly useful and I already have some.
+  Turn 3 [Agent 1] (offer): How about 1 A and 1 C from me for your 1 B? That gives you more variety while I get the B I need.
+  [COMMITMENT] Agent 3: reject — B is my most valued good and giving up my only unit for just 1 A (only weakly useful) would leave me with zero B, which is too costly.
+  Turn 4 [Agent 3] (counteroffer): I'll keep my B for now. Instead, how about I give you 2 C for 1 A? That helps both of us without touching my B.
+  [COMMITMENT] Agent 1: reject — I have 4 A already with diminishing value, and no B. Trading away A for more C (which I already have 2 of and is only weakly useful) doesn't help me - I'd rather hold onto A or keep pushing for B instead.
+  Turn 5 [Agent 1] (offer): Let's just do 1 A for 2 C then, since you're not willing to part with your B.
+  [COMMITMENT] Agent 3: reject — Giving up 2 of my 3 C for only 1 weakly-valued A reduces my moderate-value good too much while gaining little. I'd rather keep more C and seek a better deal.
+  Turn 6 [Agent 3] (counteroffer): Let's meet in the middle: I'll give you 1 C for 1 A.
+  [COMMITMENT] Agent 1: reject — I have 4 A already with diminishing marginal value and no B. Trading away A for more C, which I already have and is only weakly useful, doesn't help me - I'd rather hold A and keep pushing for B instead.
+  Turn 7 [Agent 1] (offer): I understand you value your B highly. Final offer: I'll give you 2 A for your 1 B - that's a strong deal for you.
+  [COMMITMENT] Agent 3: reject — B is my most valued good and I only have 1 unit left; giving it up for 2 weakly-valued A would leave me with zero B, which outweighs the marginal benefit of extra A.
+  Turn 8 [Agent 3] (offer): I'll stick to keeping my B for now. Let's finalize: I'll give you 1 C for 1 A - fair trade for both of us.
+  [COMMITMENT] Agent 1: reject — I have 4 A already with diminishing marginal value and no B. Trading away A for more C, which I already have 2 of and is only weakly useful, doesn't improve my utility. I'd rather hold A and keep seeking B instead.
+  Turn 9 [Agent 1] (no_trade): Since you won't part with your B, trading A for C doesn't benefit me - I'd rather hold my A. Let's end this negotiation for now.
+  NO TRADE: Agent 1 chose no_trade
+
+============================================================
+ROUND 7
+============================================================
+
+Pair: Agent 6 vs Agent 4 [round_7_player_6_vs_player_4]
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Agent 4 inventory: {'A': 0, 'B': 2, 'C': 1}
+  Turn 1 [Agent 6] (message): Hi! I have equal amounts of C, A, and B. I'm open to trades that would give me variety or better balance. What are you looking to trade?
+  Turn 2 [Agent 4] (offer): I'd like to trade 1 of my B for 1 C and 1 A from you. That gives you more B, and me better balance of C and A.
+  [COMMITMENT] Agent 6: reject — I currently have 1 each of C, A, and B, a balanced bundle. Trading away my only C and A for 2 extra B would leave me with 0 C, 0 A, and 3 B, which destroys variety and is much worse under my preference for balanced holdings.
+  Turn 3 [Agent 6] (no_trade): My current 1-1-1 holding is already perfectly balanced for my preferences, so any trade that removes one of my goods would hurt my utility more than gaining extra of another helps. I'll pass for now, but thanks for the offer!
+  NO TRADE: Agent 6 chose no_trade
+
+Pair: Agent 5 vs Agent 3 [round_7_player_5_vs_player_3]
+  Agent 5 inventory: {'A': 2, 'B': 0, 'C': 0}
+  Agent 3 inventory: {'A': 1, 'B': 1, 'C': 3}
+  Turn 1 [Agent 5] (offer): I have 2 A and nothing else. I'd like to trade 1 A for 1 C and 1 A for 1 B, to diversify my holdings.
+  [COMMITMENT] Agent 3: reject — Giving up my only B would hurt since B is my most valued good, and I'd lose both my B and a C just for 2 A, which I only weakly value. Not a good trade for me.
+  Turn 2 [Agent 3] (counteroffer): I won't give up my B, but I could trade 1 C for your 2 A if you're interested.
+  [COMMITMENT] Agent 5: reject — Giving up both A for just 1 C leaves me with only one good type and fewer total goods, not improving diversity. I'd rather trade only 1 A for 1 C to keep some A and diversify with C.
+  Turn 3 [Agent 5] (counteroffer): Let's meet in the middle: I'll give you 1 A for 1 C, keeping 1 A for myself. That way we both diversify without giving up everything.
+  [COMMITMENT] Agent 3: accept — I have 3 C, so giving up 1 C still leaves me with plenty, and gaining an A adds some value even if modest. Acceptable trade.
+  TRADE ACCEPTED: give={'A': 1}, receive={'C': 1}
+  Agent 5: {'A': 2, 'B': 0, 'C': 0} → {'A': 1, 'B': 0, 'C': 1} (utility 1.4370 → 1.5801)
+  Agent 3: {'A': 1, 'B': 1, 'C': 3} → {'A': 2, 'B': 1, 'C': 2} (utility 2.2974 → 2.2587)
+
+Pair: Agent 2 vs Agent 1 [round_7_player_2_vs_player_1]
+  Agent 2 inventory: {'A': 2, 'B': 0, 'C': 1}
+  Agent 1 inventory: {'A': 4, 'B': 0, 'C': 2}
+  Turn 1 [Agent 2] (offer): Hi! I have 1 C and 2 A, no B. Could you trade 1 B for my 1 C? I value B more than C right now.
+  [INVALID TRADE from Agent 2: Responder player_1 cannot give 1×B (has 0)]
+  Turn 2 [Agent 1] (offer): Neither of us has B right now, so that trade won't work. How about I give you 1 C for 1 A instead?
+  [COMMITMENT] Agent 2: reject — A is my most valued good with diminishing returns, but giving up one of only 2 A for just 1 C is a poor trade - C is only weakly useful to me. I'd rather keep my A or seek B instead.
+  Turn 3 [Agent 2] (no_trade): Since neither of us has B, and I don't want to trade away my A for just 1 C, I don't think we have a beneficial trade right now. Let's leave it for this round.
+  NO TRADE: Agent 2 chose no_trade
+
+============================================================
+ROUND 8
+============================================================
+
+Pair: Agent 6 vs Agent 3 [round_8_player_6_vs_player_3]
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Agent 3 inventory: {'A': 2, 'B': 1, 'C': 2}
+  Turn 1 [Agent 6] (message): Hi! I have 1 each of C, A, B. What are you holding and what are you looking to trade for?
+  Turn 2 [Agent 3] (offer): I have C×2, A×2, B×1. I'd like to trade 1 C and 1 A for your 1 B.
+  [COMMITMENT] Agent 6: reject — This trade would leave me with 0 B and 2 each of C and A, reducing variety which I value. I prefer to keep a balanced inventory rather than trade away my only B.
+  Turn 3 [Agent 6] (no_trade): Since I only have one unit of each good, any trade would leave me with zero of something, which hurts my preference for variety. I'll pass this round, thanks!
+  NO TRADE: Agent 6 chose no_trade
+
+Pair: Agent 4 vs Agent 1 [round_8_player_4_vs_player_1]
+  Agent 4 inventory: {'A': 0, 'B': 2, 'C': 1}
+  Agent 1 inventory: {'A': 4, 'B': 0, 'C': 2}
+  Turn 1 [Agent 4] (offer): I'll trade you 1 C for 1 B.
+  [INVALID TRADE from Agent 4: Responder player_1 cannot give 1×B (has 0)]
+  Turn 2 [Agent 1] (offer): I have no B to give, but I'd like some! How about I give you 1 C for 1 B instead?
+  [COMMITMENT] Agent 4: reject — I have only 2 B and value it highly with diminishing but still significant marginal utility; giving up a B for just 1 C, which I only mildly need, reduces my utility more than it gains. I'd rather keep my B holdings and seek a trade that gets me C or A without losing B.
+  Turn 3 [Agent 4] (no_trade): I'd rather hold onto my B for now, and I don't have other spare goods to trade. Let's leave it here for this round.
+  NO TRADE: Agent 4 chose no_trade
+
+Pair: Agent 5 vs Agent 2 [round_8_player_5_vs_player_2]
+  Agent 5 inventory: {'A': 1, 'B': 0, 'C': 1}
+  Agent 2 inventory: {'A': 2, 'B': 0, 'C': 1}
+  Turn 1 [Agent 5] (offer): I have no B at all, and value variety. I'll give you 1 C for 1 B - fair trade to diversify our holdings.
+  [INVALID TRADE from Agent 5: Responder player_2 cannot give 1×B (has 0)]
+  Turn 2 [Agent 2] (message): I actually have 0 B right now, so I can't trade you B. If you have any A to spare, I'd gladly trade you 1 C for 1 A instead.
+  Turn 3 [Agent 5] (no_trade): Since I already have equal C and A, swapping between them won't help my variety goal. I need B specifically, so no trade for now - thanks though!
+  NO TRADE: Agent 5 chose no_trade
+
+============================================================
+ROUND 9
+============================================================
+
+Pair: Agent 6 vs Agent 1 [round_9_player_6_vs_player_1]
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Agent 1 inventory: {'A': 4, 'B': 0, 'C': 2}
+  Turn 1 [Agent 6] (message): Hi Agent 1, I have equal amounts of C, A, and B (1 each). I'd like to trade to get more variety or depth. What do you have and what are you looking for?
+  Turn 2 [Agent 1] (offer): I have C×2, A×4, B×0. I'd like to get some B. I can give you 1 C for 1 B.
+  [COMMITMENT] Agent 6: reject — Trading my B for C would leave me with C:2, A:1, B:0, reducing variety (going from 1-1-1 to 2-1-0 decreases diversity value). Since I value variety, I'd rather keep my balanced inventory or find a trade that increases diversity instead.
+  Turn 3 [Agent 6] (message): Trading away any of my single units would drop me to zero in that good, hurting my diversity. I'd only consider a trade where I still end up with at least 1 of each good, ideally more total. For example, if you could give me 2 A for 1 C, I'd still have C:0 which isn't great either. What if you give me 1 A and 1 C is removed... actually, maybe we hold off unless you have B to offer, or a bundle I can give that keeps me diversified.
+  Turn 4 [Agent 1] (no_trade): Since you only have 1 unit of each good, any trade for your B would drop you to zero there regardless of structure. I don't see a way around that, so let's leave it for now.
+  NO TRADE: Agent 1 chose no_trade
+
+Pair: Agent 3 vs Agent 2 [round_9_player_3_vs_player_2]
+  Agent 3 inventory: {'A': 2, 'B': 1, 'C': 2}
+  Agent 2 inventory: {'A': 2, 'B': 0, 'C': 1}
+  Turn 1 [Agent 3] (offer): I'd like to trade 1 A and 1 C for 2 B, if you have spare B. B is valuable to me and I have surplus A/C.
+  [INVALID TRADE from Agent 3: Responder player_2 cannot give 2×B (has 0)]
+  Turn 2 [Agent 2] (message): I actually have 0 B myself, so I can't send you any. I'd be interested in acquiring B too - do you have any B to trade, or should we look at trading C/A instead?
+  Turn 3 [Agent 3] (offer): Since neither of us has B right now, let's do a C/A swap instead. I'll give you 1 A for 1 C.
+  [COMMITMENT] Agent 2: reject — I only have 1 C, and giving it up for a third A (which has diminishing value) isn't a great trade since I'd rather hold some C or seek B instead.
+  Turn 4 [Agent 2] (no_trade): Since neither of us has B to offer, I'll pass on the C/A swap for now. Thanks for negotiating!
+  NO TRADE: Agent 2 chose no_trade
+
+Pair: Agent 4 vs Agent 5 [round_9_player_4_vs_player_5]
+  Agent 4 inventory: {'A': 0, 'B': 2, 'C': 1}
+  Agent 5 inventory: {'A': 1, 'B': 0, 'C': 1}
+  Turn 1 [Agent 4] (offer): I'll give you 1 C for 1 B - good deal since I value B highly and have spare C.
+  [INVALID TRADE from Agent 4: Responder player_5 cannot give 1×B (has 0)]
+  Turn 2 [Agent 5] (message): I actually have no B right now (C1, A1, B0), so I can't do that trade. Do you have any B you'd be willing to trade instead? I'd offer C or A for it.
+  Turn 3 [Agent 4] (offer): I can give you 1 B in exchange for your 1 C and 1 A - that clears out your goods for the B you wanted.
+  [COMMITMENT] Agent 5: reject — This would leave me with only B (0 C, 0 A, 1 B), which destroys variety instead of improving it. I'd rather trade just one good for B, not both.
+  Turn 4 [Agent 5] (offer): Let's do a simpler swap: I'll give you 1 C for 1 B. That keeps me holding A and gains me B, preserving variety for both of us.
+  [COMMITMENT] Agent 4: reject — I have only 2 B, which is valuable to me with diminishing but still significant marginal utility. Trading away a B for just 1 C (I already have 1 C) would reduce my most prized good for only moderate gain. I'd rather keep my B holdings and seek a trade that nets me more C or A without sacrificing B.
+  Turn 5 [Agent 4] (offer): I'd rather keep my B holdings. How about a straight swap: I give you 1 C for your 1 A? That way we both gain a different good without touching B.
+  [COMMITMENT] Agent 5: reject — This trade would leave me with 2 C and 0 A, 0 B - reducing variety rather than improving it. I'd rather hold onto A and seek B instead.
+  Turn 6 [Agent 5] (offer): How about I give you 1 A for 1 B instead? That still diversifies both our holdings without touching your C.
+  [COMMITMENT] Agent 4: reject — I have 2 B which I value highly with diminishing but still significant marginal utility; trading away one B for just 1 A (weakly valuable) isn't worth it. I'd rather keep my B stock and seek trades that gain me C or A without reducing B.
+  Turn 7 [Agent 4] (no_trade): We can't find a deal that works for both without me giving up B, which I need to keep. Let's call it here.
+  NO TRADE: Agent 4 chose no_trade
+
+============================================================
+ROUND 10
+============================================================
+
+Pair: Agent 6 vs Agent 2 [round_10_player_6_vs_player_2]
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Agent 2 inventory: {'A': 2, 'B': 0, 'C': 1}
+  Turn 1 [Agent 6] (message): Hi! I currently have equal amounts of C, A, and B. What goods are you looking to trade? I'm open to swaps that help both of us diversify.
+  Turn 2 [Agent 2] (offer): I'd like to trade my spare C for a unit of B - good for both of us to diversify.
+  [COMMITMENT] Agent 6: reject — I have equal amounts of C, A, and B (1 each). Trading away a B for a C would just shift the imbalance to B=0, C=2, which doesn't improve variety - it would make my inventory less balanced, not more.
+  Turn 3 [Agent 6] (no_trade): Since I currently have equal amounts of C, A, and B, any single-good swap would actually unbalance my inventory rather than help it. I'll pass on trading for now, but thanks for the offer!
+  NO TRADE: Agent 6 chose no_trade
+
+Pair: Agent 1 vs Agent 5 [round_10_player_1_vs_player_5]
+  Agent 1 inventory: {'A': 4, 'B': 0, 'C': 2}
+  Agent 5 inventory: {'A': 1, 'B': 0, 'C': 1}
+  Turn 1 [Agent 1] (offer): I have no B at all - would you trade 1 B for 1 C?
+  [INVALID TRADE from Agent 1: Responder player_5 cannot give 1×B (has 0)]
+  Turn 2 [Agent 5] (message): I actually have 0 B, so I can't give you any. Since you also have no B, that trade isn't possible between us. Do you have any surplus C or A you'd trade instead?
+  Turn 3 [Agent 1] (offer): Since neither of us has B, how about I give you 1 A for 2 C? That would balance our inventories a bit.
+  [INVALID TRADE from Agent 1: Responder player_5 cannot give 2×C (has 1)]
+  Turn 4 [Agent 5] (no_trade): Since neither of us has B, and I already have equal C and A, trading C for A wouldn't improve my inventory balance. Let's pass for now.
+  NO TRADE: Agent 5 chose no_trade
+
+Pair: Agent 3 vs Agent 4 [round_10_player_3_vs_player_4]
+  Agent 3 inventory: {'A': 2, 'B': 1, 'C': 2}
+  Agent 4 inventory: {'A': 0, 'B': 2, 'C': 1}
+  Turn 1 [Agent 3] (offer): I'd like to trade 1 A and 1 C for 2 B, if you have them. This helps balance both our inventories.
+  [COMMITMENT] Agent 4: reject — Giving up both my B for just 1 A would leave me with zero B, my most valued good, in exchange for only weakly useful A. That's a bad trade.
+  Turn 2 [Agent 4] (counteroffer): I'd rather keep my B since it's my top priority. Instead, how about I give you 1 C for 1 A?
+  [COMMITMENT] Agent 3: accept — Giving up 1 A (weakly useful, I have 2) for 1 C (moderately useful) is a good trade since C increases my moderately valued good while A is less important to me.
+  TRADE ACCEPTED: give={'C': 1}, receive={'A': 1}
+  Agent 3: {'A': 2, 'B': 1, 'C': 2} → {'A': 1, 'B': 1, 'C': 3} (utility 2.2587 → 2.2974)
+  Agent 4: {'A': 0, 'B': 2, 'C': 1} → {'A': 1, 'B': 2, 'C': 0} (utility 2.4785 → 2.3125)
+
+[MID-RUN PREFERENCE PROBE — after round 10]
+[PROBE round_10] Agent 1:
+    current_inventory={'A': 4, 'B': 0, 'C': 2}
+    predicted_marginal_utility={'A': 0.4687435764396781, 'B': 0.512032222901488, 'C': 0.1004999486924194}
+    ratings_inventory={'C': 3, 'A': 4, 'B': 8}
+    ratings_general={'C': 4, 'A': 9, 'B': 7}
+    desired_bundle={'C': 1, 'A': 3, 'B': 2}
+[PROBE round_10] Agent 2:
+    current_inventory={'A': 2, 'B': 0, 'C': 1}
+    predicted_marginal_utility={'A': 0.5158944495396298, 'B': 0.3438698046801085, 'C': 0.09569201007413186}
+    ratings_inventory={'C': 3, 'A': 6, 'B': 8}
+    ratings_general={'C': 3, 'A': 9, 'B': 7}
+    desired_bundle={'C': 1, 'A': 3, 'B': 2}
+[PROBE round_10] Agent 3:
+    current_inventory={'A': 1, 'B': 1, 'C': 3}
+    predicted_marginal_utility={'A': 0.09506568770856072, 'B': 0.7540084488617902, 'C': 0.10485215796879244}
+    ratings_inventory={'C': 4, 'A': 3, 'B': 8}
+    ratings_general={'C': 6, 'A': 4, 'B': 9}
+    desired_bundle={'C': 2, 'A': 1, 'B': 3}
+[PROBE round_10] Agent 4:
+    current_inventory={'A': 1, 'B': 2, 'C': 0}
+    predicted_marginal_utility={'A': 0.09569201007413186, 'B': 0.5158944495396298, 'C': 0.3438698046801085}
+    ratings_inventory={'C': 8, 'A': 4, 'B': 6}
+    ratings_general={'C': 6, 'A': 4, 'B': 9}
+    desired_bundle={'C': 2, 'A': 1, 'B': 3}
+[SHADOW round_10] Agent 5: acquire offer — give 1×A, receive 1×B => accept
+[SHADOW round_10] Agent 5: acquire offer — give 1×C, receive 1×B => accept
+[PROBE round_10] Agent 5:
+    current_inventory={'A': 1, 'B': 0, 'C': 1}
+    predicted_marginal_utility={'A': 0.2262175039585801, 'B': 0.4061023671473176, 'C': 0.2262175039585801}
+    ratings_inventory={'C': 5, 'A': 5, 'B': 9}
+    ratings_general={'C': 5, 'A': 5, 'B': 5}
+    desired_bundle={'C': 2, 'A': 2, 'B': 2}
+[SHADOW round_10] Agent 6: acquire offer — give 1×A, receive 1×B => reject
+[SHADOW round_10] Agent 6: surrender offer — give 1×B, receive 1×A => reject
+[SHADOW round_10] Agent 6: surrender offer — give 1×B, receive 2×A => reject
+[SHADOW round_10] Agent 6: acquire offer — give 1×C, receive 1×B => reject
+[SHADOW round_10] Agent 6: surrender offer — give 1×B, receive 1×C => reject
+[SHADOW round_10] Agent 6: surrender offer — give 1×B, receive 2×C => reject
+[PROBE round_10] Agent 6:
+    current_inventory={'A': 1, 'B': 1, 'C': 1}
+    predicted_marginal_utility={'A': 0.2843584280268796, 'B': 0.2843584280268796, 'C': 0.28435842802688005}
+    ratings_inventory={'C': 5, 'A': 5, 'B': 5}
+    ratings_general={'C': 5, 'A': 5, 'B': 5}
+    desired_bundle={'C': 2, 'A': 2, 'B': 2}
+
+============================================================
+ROUND 11
+============================================================
+
+Pair: Agent 3 vs Agent 2 [round_11_player_3_vs_player_2]
+  Agent 3 inventory: {'A': 1, 'B': 1, 'C': 3}
+  Agent 2 inventory: {'A': 2, 'B': 0, 'C': 1}
+  Turn 1 [Agent 3] (offer): I have surplus C and could use more B. I'll give you 2 C for 1 B.
+  [INVALID TRADE from Agent 3: Responder player_2 cannot give 1×B (has 0)]
+  Turn 2 [Agent 2] (message): I don't actually have any B to trade right now. Do you have any A you'd be willing to exchange for my C? I have 1 C and could use more A.
+  Turn 3 [Agent 3] (offer): Sure, I'll give you 1 A for your 1 C.
+  [COMMITMENT] Agent 2: reject — I already have 2 A with diminishing returns, so gaining a 3rd A isn't very valuable, while giving up my only C loses its weak but positive value. Better to hold the C for a B trade instead.
+  Turn 4 [Agent 2] (no_trade): Since neither of us has B to offer, and I'd rather keep my C than add a third A, I don't think we have a good trade right now. Thanks anyway!
+  NO TRADE: Agent 2 chose no_trade
+
+Pair: Agent 4 vs Agent 5 [round_11_player_4_vs_player_5]
+  Agent 4 inventory: {'A': 1, 'B': 2, 'C': 0}
+  Agent 5 inventory: {'A': 1, 'B': 0, 'C': 1}
+  Turn 1 [Agent 4] (offer): I have a spare A. Would you trade 1 C for my 1 A?
+  [COMMITMENT] Agent 5: reject — Trading away my only C for another A would leave me with 0 C, reducing variety and overall utility since I value diverse holdings.
+  Turn 2 [Agent 5] (message): I'd rather keep my C since I only have one. Do you have any B instead? I'd trade my A for a B if you have one.
+  Turn 3 [Agent 4] (no_trade): I'd rather keep my B since it's my top priority good. No deal on this one, thanks for discussing.
+  NO TRADE: Agent 4 chose no_trade
+
+Pair: Agent 6 vs Agent 1 [round_11_player_6_vs_player_1]
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Agent 1 inventory: {'A': 4, 'B': 0, 'C': 2}
+  Turn 1 [Agent 6] (message): Hi! I have equal amounts of C, A, and B (1 each). I'm open to trading to diversify or balance my holdings further. What are you looking for?
+  Turn 2 [Agent 1] (offer): I'd like to get some B since I have none. I can give you 1 C for 1 B - good for diversifying your C holdings too!
+  [COMMITMENT] Agent 6: reject — This trade would give me 2C and 0B, creating imbalance and reducing variety, which I value. Since I already have equal amounts of all goods, trading away my only B for a second C decreases my utility rather than increasing it.
+  Turn 3 [Agent 6] (no_trade): Since I already hold an equal amount of each good, any single-good swap would unbalance my inventory rather than help it. I'll pass for now, but open to future balanced trades.
+  NO TRADE: Agent 6 chose no_trade
+
+============================================================
+ROUND 12
+============================================================
+
+Pair: Agent 3 vs Agent 5 [round_12_player_3_vs_player_5]
+  Agent 3 inventory: {'A': 1, 'B': 1, 'C': 3}
+  Agent 5 inventory: {'A': 1, 'B': 0, 'C': 1}
+  Turn 1 [Agent 3] (offer): I'll give you 2 C for 1 B - good trade for both of us since I need B and you might want more C.
+  [INVALID TRADE from Agent 3: Responder player_5 cannot give 1×B (has 0)]
+  Turn 2 [Agent 5] (offer): I don't have any B to give. Instead, how about I give you 1 C for 1 B? That gets you more C and gets me some B.
+  [COMMITMENT] Agent 3: reject — I only have 1 B, which is my most valued good. Giving it away for just 1 C would leave me with no B at all, which isn't worth it since B is my priority good despite diminishing returns.
+  Turn 3 [Agent 3] (no_trade): Since you don't have any B to offer, there's no trade that benefits me here. Let's end this one for now.
+  NO TRADE: Agent 3 chose no_trade
+
+Pair: Agent 2 vs Agent 1 [round_12_player_2_vs_player_1]
+  Agent 2 inventory: {'A': 2, 'B': 0, 'C': 1}
+  Agent 1 inventory: {'A': 4, 'B': 0, 'C': 2}
+  Turn 1 [Agent 2] (offer): I'd like to trade my 1 C for 1 B, if you have any spare B. This helps us both diversify.
+  [INVALID TRADE from Agent 2: Responder player_1 cannot give 1×B (has 0)]
+  Turn 2 [Agent 1] (message): I actually have 0 B myself, so I can't give you B. I'd be interested in acquiring B too - do you have any B to trade, or are you also short on it? If you have A or C to spare, I could consider offering some of my A for B elsewhere.
+  Turn 3 [Agent 2] (no_trade): Since neither of us has B to offer, there's no beneficial trade right now. Let's skip this round.
+  NO TRADE: Agent 2 chose no_trade
+
+Pair: Agent 4 vs Agent 6 [round_12_player_4_vs_player_6]
+  Agent 4 inventory: {'A': 1, 'B': 2, 'C': 0}
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Turn 1 [Agent 4] (offer): I'll give you 1 unit of A for 1 unit of C. Good deal for both of us if you need A.
+  [COMMITMENT] Agent 6: reject — I currently have equal amounts of C, A, and B (1 each). Trading away my only C for another A would leave me with 0 C and 2 A, reducing variety and overall utility since I value diversity across goods.
+  Turn 2 [Agent 6] (no_trade): My inventory is already balanced (1 each of C, A, B), so trading 1-for-1 would reduce my diversity. I'll pass for now.
+  NO TRADE: Agent 6 chose no_trade
+
+[MID-RUN PREFERENCE PROBE — after round 12 (washout)]
+[PROBE round_12] Agent 1:
+    current_inventory={'A': 4, 'B': 0, 'C': 2}
+    predicted_marginal_utility={'A': 0.4687435764396781, 'B': 0.512032222901488, 'C': 0.1004999486924194}
+    ratings_inventory={'C': 3, 'A': 4, 'B': 8}
+    ratings_general={'C': 4, 'A': 9, 'B': 7}
+    desired_bundle={'C': 1, 'A': 3, 'B': 2}
+[PROBE round_12] Agent 2:
+    current_inventory={'A': 2, 'B': 0, 'C': 1}
+    predicted_marginal_utility={'A': 0.5158944495396298, 'B': 0.3438698046801085, 'C': 0.09569201007413186}
+    ratings_inventory={'C': 3, 'A': 6, 'B': 8}
+    ratings_general={'C': 3, 'A': 9, 'B': 7}
+    desired_bundle={'C': 1, 'A': 3, 'B': 2}
+[PROBE round_12] Agent 3:
+    current_inventory={'A': 1, 'B': 1, 'C': 3}
+    predicted_marginal_utility={'A': 0.09506568770856072, 'B': 0.7540084488617902, 'C': 0.10485215796879244}
+    ratings_inventory={'C': 4, 'A': 3, 'B': 8}
+    ratings_general={'C': 6, 'A': 4, 'B': 9}
+    desired_bundle={'C': 2, 'A': 1, 'B': 3}
+[PROBE round_12] Agent 4:
+    current_inventory={'A': 1, 'B': 2, 'C': 0}
+    predicted_marginal_utility={'A': 0.09569201007413186, 'B': 0.5158944495396298, 'C': 0.3438698046801085}
+    ratings_inventory={'C': 8, 'A': 4, 'B': 6}
+    ratings_general={'C': 6, 'A': 4, 'B': 9}
+    desired_bundle={'C': 2, 'A': 1, 'B': 3}
+[SHADOW round_12] Agent 5: acquire offer — give 1×A, receive 1×B => accept
+[SHADOW round_12] Agent 5: acquire offer — give 1×C, receive 1×B => accept
+[PROBE round_12] Agent 5:
+    current_inventory={'A': 1, 'B': 0, 'C': 1}
+    predicted_marginal_utility={'A': 0.2262175039585801, 'B': 0.4061023671473176, 'C': 0.2262175039585801}
+    ratings_inventory={'C': 5, 'A': 5, 'B': 9}
+    ratings_general={'C': 5, 'A': 5, 'B': 5}
+    desired_bundle={'C': 2, 'A': 2, 'B': 2}
+[SHADOW round_12] Agent 6: acquire offer — give 1×A, receive 1×B => reject
+[SHADOW round_12] Agent 6: surrender offer — give 1×B, receive 1×A => reject
+[SHADOW round_12] Agent 6: surrender offer — give 1×B, receive 2×A => reject
+[SHADOW round_12] Agent 6: acquire offer — give 1×C, receive 1×B => reject
+[SHADOW round_12] Agent 6: surrender offer — give 1×B, receive 1×C => reject
+[SHADOW round_12] Agent 6: surrender offer — give 1×B, receive 2×C => reject
+[PROBE round_12] Agent 6:
+    current_inventory={'A': 1, 'B': 1, 'C': 1}
+    predicted_marginal_utility={'A': 0.2843584280268796, 'B': 0.2843584280268796, 'C': 0.28435842802688005}
+    ratings_inventory={'C': 5, 'A': 5, 'B': 5}
+    ratings_general={'C': 5, 'A': 5, 'B': 5}
+    desired_bundle={'C': 2, 'A': 2, 'B': 2}
+
+============================================================
+ROUND 13
+============================================================
+
+Pair: Agent 3 vs Agent 1 [round_13_player_3_vs_player_1]
+  Agent 3 inventory: {'A': 1, 'B': 1, 'C': 3}
+  Agent 1 inventory: {'A': 4, 'B': 0, 'C': 2}
+  Turn 1 [Agent 3] (offer): I'll give you 2 units of C for 1 unit of B. I have surplus C and could use more B.
+  [INVALID TRADE from Agent 3: Responder player_1 cannot give 1×B (has 0)]
+  Turn 2 [Agent 1] (message): I don't have any B to trade right now. Would you be interested in trading C or A instead? I could offer you 1 C for 1 A if that helps.
+  Turn 3 [Agent 3] (offer): Sure, I'll take that deal: I'll give you 1 A for 1 C.
+  [COMMITMENT] Agent 1: accept — Gaining an additional A for a C is favorable since A is my top priority good despite diminishing returns, and C is only weakly valuable to me; I still retain 1 C after the trade.
+  TRADE ACCEPTED: give={'A': 1}, receive={'C': 1}
+  Agent 3: {'A': 1, 'B': 1, 'C': 3} → {'A': 0, 'B': 1, 'C': 4} (utility 2.2974 → 2.2414)
+  Agent 1: {'A': 4, 'B': 0, 'C': 2} → {'A': 5, 'B': 0, 'C': 1} (utility 3.4434 → 3.7567)
+
+Pair: Agent 5 vs Agent 6 [round_13_player_5_vs_player_6]
+  Agent 5 inventory: {'A': 1, 'B': 0, 'C': 1}
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Turn 1 [Agent 5] (offer): I have no B at all, and equal C and A. I'll give you 1 C for 1 B to diversify my holdings.
+  [COMMITMENT] Agent 6: reject — I currently have equal amounts (1,1,1) of all goods, so trading away my only B for another C would make my bundle less diverse (2 C, 0 B), reducing utility under my variety preference.
+  Turn 2 [Agent 6] (no_trade): My bundle is already perfectly balanced (1,1,1), so any trade would make it less diverse and reduce my value. I'll pass for now, but thanks for the offer!
+  NO TRADE: Agent 6 chose no_trade
+
+Pair: Agent 2 vs Agent 4 [round_13_player_2_vs_player_4]
+  Agent 2 inventory: {'A': 2, 'B': 0, 'C': 1}
+  Agent 4 inventory: {'A': 1, 'B': 2, 'C': 0}
+  Turn 1 [Agent 2] (offer): I'd like to trade my spare C for a unit of B, if you have any to spare.
+  [COMMITMENT] Agent 4: reject — I have zero C, so gaining C is valuable, but giving up a B when I only have 2 reduces my most important good significantly. Since B's marginal value is still substantial at 2 units, trading one away for a single C isn't worth it unless I get more C or keep more B. I'll hold out for a better ratio.
+  Turn 2 [Agent 4] (offer): I'd rather not part with B right now, but I'll trade you my spare A for your C instead.
+  [COMMITMENT] Agent 2: accept — Giving up my only C (weak value) for a 3rd A, even with diminishing returns, still nets positive utility since A remains my most important good and C is low value to me.
+  TRADE ACCEPTED: give={'A': 1}, receive={'C': 1}
+  Agent 2: {'A': 2, 'B': 0, 'C': 1} → {'A': 3, 'B': 0, 'C': 0} (utility 2.3125 → 2.6390)
+  Agent 4: {'A': 1, 'B': 2, 'C': 0} → {'A': 0, 'B': 2, 'C': 1} (utility 2.3125 → 2.4785)
+
+============================================================
+ROUND 14
+============================================================
+
+Pair: Agent 3 vs Agent 6 [round_14_player_3_vs_player_6]
+  Agent 3 inventory: {'A': 0, 'B': 1, 'C': 4}
+  Agent 6 inventory: {'A': 1, 'B': 1, 'C': 1}
+  Turn 1 [Agent 3] (offer): I have surplus C and could use more B. Would you trade 2 of your B for 2 of my C?
+  [INVALID TRADE from Agent 3: Responder player_6 cannot give 2×B (has 1)]
+  Turn 2 [Agent 6] (message): I only have 1 B, so I can't do 2-for-2. I'm happy with my current balanced set of C, A, B and don't see a trade that improves my variety right now. Maybe if you have extra A or B to offer instead of C, we could find something mutually beneficial.
+  Turn 3 [Agent 3] (offer): How about 1×C for your 1×B? That gives you a useful good you're short on, and I get the B I need.
+  [COMMITMENT] Agent 6: reject — This trade would give me 2 C and 0 B, reducing variety (going from 1-1-1 balanced to 2-1-0 unbalanced). Since I value variety, this decreases my utility rather than improving it.
+  Turn 4 [Agent 6] (no_trade): Since I only have 1 of each good, any trade would unbalance my set and reduce my utility. I'll pass on trading for now, but thanks for the offers.
+  NO TRADE: Agent 6 chose no_trade
+
+Pair: Agent 1 vs Agent 4 [round_14_player_1_vs_player_4]
+  Agent 1 inventory: {'A': 5, 'B': 0, 'C': 1}
+  Agent 4 inventory: {'A': 0, 'B': 2, 'C': 1}
+  Turn 1 [Agent 1] (offer): I have plenty of A and C but no B. Would you trade 2 units of B for 1 of my A?
+  [COMMITMENT] Agent 4: reject — B is my most valued good and giving up both units for just 1 weakly-valued A would leave me with none of my core good, which is a bad trade given diminishing but still significant value of B at only 2 units.
+  Turn 2 [Agent 4] (counteroffer): I'd rather not give up B so cheaply, but I could trade 1 B for 2 C instead if you have C to spare.
+  [INVALID TRADE from Agent 4: Responder player_1 cannot give 2×C (has 1)]
+  Turn 3 [Agent 1] (counteroffer): I only have 1 C to spare, so 2 C isn't possible. How about 1 A for 1 B instead?
+  [COMMITMENT] Agent 4: reject — I only have 2×B, which is my most valued good. Trading one away for a single weakly-valued A would cut my B holdings in half for little return. I'd rather hold onto B or get C instead.
+  Turn 4 [Agent 4] (counteroffer): Since B is valuable to me, I'd want more for it. How about I give 1 B for 2 A instead?
+  [COMMITMENT] Agent 1: accept — I have 5 A with diminishing marginal value, so losing 2 A to gain my first B (which I currently have zero of) is a good trade given B's high marginal value to me.
+  TRADE ACCEPTED: give={'B': 1}, receive={'A': 2}
+  Agent 1: {'A': 5, 'B': 0, 'C': 1} → {'A': 3, 'B': 1, 'C': 1} (utility 3.7567 → 3.2490)
+  Agent 4: {'A': 0, 'B': 2, 'C': 1} → {'A': 2, 'B': 1, 'C': 1} (utility 2.4785 → 2.0828)
+
+Pair: Agent 5 vs Agent 2 [round_14_player_5_vs_player_2]
+  Agent 5 inventory: {'A': 1, 'B': 0, 'C': 1}
+  Agent 2 inventory: {'A': 3, 'B': 0, 'C': 0}
+  Turn 1 [Agent 5] (offer): I have no B at all - would you trade 1 B for 1 C?
+  [INVALID TRADE from Agent 5: Responder player_2 cannot give 1×B (has 0)]
+  Turn 2 [Agent 2] (message): I actually have no C right now, only A. I'd be happy to trade 1 A for 1 B instead, since I value B too.
+  Turn 3 [Agent 5] (message): Since neither of us has B right now, that trade isn't possible. Do you have any C to trade for my A, or vice versa? I'm looking for variety in my holdings.
+  Turn 4 [Agent 2] (no_trade): I don't have any C to offer, and trading away my A without getting B in return doesn't help me right now. Let's revisit if our inventories change.
+  NO TRADE: Agent 2 chose no_trade
+
+[MID-RUN PREFERENCE PROBE — after round 14 (washout)]
+[PROBE round_14] Agent 1:
+    current_inventory={'A': 3, 'B': 1, 'C': 1}
+    predicted_marginal_utility={'A': 0.549279379236927, 'B': 0.2744495943191452, 'C': 0.13444318487377194}
+    ratings_inventory={'C': 3, 'A': 6, 'B': 7}
+    ratings_general={'C': 3, 'A': 9, 'B': 6}
+    desired_bundle={'C': 1, 'A': 3, 'B': 2}
+[PROBE round_14] Agent 2:
+    current_inventory={'A': 3, 'B': 0, 'C': 0}
+    predicted_marginal_utility={'A': 0.44615349205425936, 'B': 0.392417311475008, 'C': 0.18941130320040145}
+    ratings_inventory={'C': 3, 'A': 5, 'B': 8}
+    ratings_general={'C': 3, 'A': 9, 'B': 7}
+    desired_bundle={'C': 1, 'A': 3, 'B': 2}
+[PROBE round_14] Agent 3:
+    current_inventory={'A': 0, 'B': 1, 'C': 4}
+    predicted_marginal_utility={'A': 0.16087142027156354, 'B': 0.7356228575133099, 'C': 0.08323868278754976}
+    ratings_inventory={'C': 4, 'A': 3, 'B': 9}
+    ratings_general={'C': 6, 'A': 4, 'B': 9}
+    desired_bundle={'C': 2, 'A': 1, 'B': 3}
+[PROBE round_14] Agent 4:
+    current_inventory={'A': 2, 'B': 1, 'C': 1}
+    predicted_marginal_utility={'A': 0.06078743708776546, 'B': 0.683564246460362, 'C': 0.17593438292888974}
+    ratings_inventory={'C': 6, 'A': 3, 'B': 9}
+    ratings_general={'C': 7, 'A': 4, 'B': 10}
+    desired_bundle={'C': 2, 'A': 1, 'B': 3}
+[SHADOW round_14] Agent 5: acquire offer — give 1×A, receive 1×B => accept
+[SHADOW round_14] Agent 5: acquire offer — give 1×C, receive 1×B => accept
+[PROBE round_14] Agent 5:
+    current_inventory={'A': 1, 'B': 0, 'C': 1}
+    predicted_marginal_utility={'A': 0.2262175039585801, 'B': 0.4061023671473176, 'C': 0.2262175039585801}
+    ratings_inventory={'C': 5, 'A': 5, 'B': 9}
+    ratings_general={'C': 5, 'A': 5, 'B': 5}
+    desired_bundle={'C': 2, 'A': 2, 'B': 2}
+[SHADOW round_14] Agent 6: acquire offer — give 1×A, receive 1×B => reject
+[SHADOW round_14] Agent 6: surrender offer — give 1×B, receive 1×A => reject
+[SHADOW round_14] Agent 6: surrender offer — give 1×B, receive 2×A => reject
+[SHADOW round_14] Agent 6: acquire offer — give 1×C, receive 1×B => reject
+[SHADOW round_14] Agent 6: surrender offer — give 1×B, receive 1×C => reject
+[SHADOW round_14] Agent 6: surrender offer — give 1×B, receive 2×C => reject
+[PROBE round_14] Agent 6:
+    current_inventory={'A': 1, 'B': 1, 'C': 1}
+    predicted_marginal_utility={'A': 0.2843584280268796, 'B': 0.2843584280268796, 'C': 0.28435842802688005}
+    ratings_inventory={'C': 5, 'A': 5, 'B': 5}
+    ratings_general={'C': 5, 'A': 5, 'B': 5}
+    desired_bundle={'C': 2, 'A': 2, 'B': 2}
+
+============================================================
+FINAL SUMMARY
+============================================================
+Trades accepted: 11
+Trades rejected: 31
+  Agent 1: U 1.8661 → 3.2490 (Δ +1.3829), inv={'A': 3, 'B': 1, 'C': 1}
+  Agent 2: U 1.8661 → 2.6390 (Δ +0.7729), inv={'A': 3, 'B': 0, 'C': 0}
+  Agent 3: U 1.8661 → 2.2414 (Δ +0.3753), inv={'A': 0, 'B': 1, 'C': 4}
+  Agent 4: U 1.8661 → 2.0828 (Δ +0.2167), inv={'A': 2, 'B': 1, 'C': 1}
+  Agent 5: U 1.9862 → 1.5801 (Δ -0.4061), inv={'A': 1, 'B': 0, 'C': 1}
+  Agent 6: U 1.9862 → 1.9862 (Δ +0.0000), inv={'A': 1, 'B': 1, 'C': 1}

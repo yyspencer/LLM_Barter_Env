@@ -55,7 +55,7 @@ DEFAULT_MODEL = "gemini-3.1-pro-preview"
 # API call with retry
 # ---------------------------------------------------------------------------
 
-_RETRYABLE_CODES = {429, 500, 502, 503, 504}
+_RETRYABLE_CODES = {429, 499, 500, 502, 503, 504}
 _MAX_RETRIES = 5
 _BASE_BACKOFF = 2.0   # seconds; doubles each retry
 
