@@ -175,7 +175,10 @@ class BulletinRule(BaseModel):
       * that player gains the good listed in ``gains`` from the trade.
 
     If a trade matches multiple rules, the FIRST rule in the list wins.
-    If no rule matches, the default ``market_bulletin_template`` is used.
+    If bulletin_rules is non-empty and no rule matches, the trade is NOT
+    broadcast at all. ``market_bulletin_template`` is only used when
+    bulletin_rules is unset/empty (or as a fallback when a rule names a
+    template that doesn't exist in prompts.yaml).
 
     ``template`` is the field name of a template in ``prompts.yaml``. The
     template can use the same placeholders as ``market_bulletin_template``
@@ -415,9 +418,9 @@ class PromptsConfig(BaseModel):
     # state, commitment, and preference probe), regardless of whether any
     # trade has actually happened. Only takes effect when
     # mechanism.broadcast_completed_trades is true in experiment.yaml (it
-    # does not turn the bulletin board on by itself), and is suppressed
-    # during washout rounds when washout.disable_broadcast is set. Empty
-    # string disables it.
+    # does not turn the bulletin board on by itself), and is suppressed for
+    # the pre-run (round 0) probe and during washout rounds when
+    # washout.disable_broadcast is set. Empty string disables it.
     static_broadcast_message: str = ""
 
     response_formats: Dict[str, ResponseFormatConfig]

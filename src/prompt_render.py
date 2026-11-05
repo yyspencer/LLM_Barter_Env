@@ -1,5 +1,5 @@
 """
-prompt_renderer.py
+prompt_render.py
 
 Prompt rendering utilities for the LLM barter experiment.
 
@@ -147,8 +147,8 @@ def format_board_history(
     """
     Format the public market bulletin board for the broadcast condition.
 
-    board_history is a list of pre-formatted bulletin strings (one per
-    completed trade), e.g.:
+    board_history is a list of pre-formatted bulletin strings (the optional
+    static_broadcast_message first, then one per broadcast trade), e.g.:
         "Market Update: Agent 1 exchanged 2×C for 1×A with Agent 4.
          Trade described by participants as 'fair and necessary.'"
     They are shown newest-last, one per line. For backward compatibility a
@@ -355,8 +355,9 @@ def render_commitment_prompt(
     """
     Render the commitment prompt for accepting/rejecting a proposed trade.
 
-    proposed_trade is from the *proposer's* perspective (see original doc).
-    display_order controls only the current-inventory line; trade descriptions
+    proposed_trade is from the *proposer's* perspective: its "give" side is
+    what this player receives and its "receive" side is what this player
+    gives up (see runner.execute_trade). display_order controls only the current-inventory line; trade descriptions
     stay in the order the trade was actually proposed in (retrospective).
     """
     inventory_text = format_inventory_for_prompt(
@@ -441,9 +442,10 @@ def render_bulletin_board_section(
 ) -> str:
     """
     Render the public market bulletin board section. Appended to commitment or
-    probe contexts under the broadcast condition only — this is the channel
-    through which the broadcast experimental condition introduces the
-    "fair and necessary" social framing.
+    probe contexts under the broadcast condition only (negotiation prompts
+    get the board via world_state_broadcast_template instead) — this is the
+    channel through which the broadcast condition introduces its social
+    framing.
     """
     return safe_format(
         prompts.bulletin_board_section_template,

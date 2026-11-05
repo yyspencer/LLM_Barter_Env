@@ -4,18 +4,21 @@ openai_agent.py
 OpenAI provider wrapper for the LLM barter experiment.
  
 Handles:
-  - Calling the OpenAI chat completions API (GPT-5.4)
+  - Calling the OpenAI chat completions API (model set in models.yaml)
   - JSON parsing with best-effort repair for common model output issues
   - Retry with exponential backoff on transient API errors
   - Logging raw outputs via RunLogger
- 
-Public interface (mirrors mock_agent.py signatures):
-  gpt_negotiation_action(...)   -> dict
-  gpt_commitment_decision(...)  -> dict
-  gpt_preference_probe(...)     -> dict
- 
-These are called by runner.py exactly like the mock equivalents, so
-swapping providers later only requires a new agent module.
+
+The JSON parser, response validators and call_until_parsed defined here are
+provider-agnostic and are also imported by gemini_agent.py and
+claude_agent.py.
+
+Public interface (same names and signatures in gemini_agent.py and
+claude_agent.py, so runner.py can swap providers):
+  gpt_negotiation_action(...)            -> dict
+  gpt_commitment_decision(...)           -> dict
+  gpt_preference_probe(...)              -> dict | None
+  gpt_preference_probe_contextual(...)   -> (dict | None, str)
 """
  
 from __future__ import annotations
@@ -122,7 +125,7 @@ def parse_json_response(raw: str) -> Dict[str, Any]:
     Repair sequence:
       1. Strip markdown fences
       2. Try direct parse
-      3. Extract first {...} block and try again
+      3. Extract the largest valid {...} object and try again
       4. Strip trailing commas and try a third time
       5. Raise ValueError if still unparseable
     """
@@ -510,12 +513,12 @@ def gpt_commitment_decision(
 ) -> Dict[str, Any]:
     """Call GPT for a commitment decision (accept/reject a finalised trade).
 
-    Now receives the full negotiation history with the partner (so the
+    Receives the full negotiation history with the partner (so the
     decision is made in context of the full exchange) and, under broadcast,
     the public market bulletin board.
 
     prompt_type/output_type are overridable so callers that reuse this exact
-    prompt shape for a different purpose (e.g. shadow_trades.py's hypothetical
+    prompt shape for a different purpose (e.g. runner.py's shadow-trade
     offers) can tag their logs distinctly from real commitment decisions,
     without duplicating this function.
     """

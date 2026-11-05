@@ -6,11 +6,12 @@ Entry point for the LLM barter experiment.
 Modes:
   --dry-run      Validate configs and print the pairing schedule. No API calls.
   --mock-run     Run the full experiment with deterministic mock agents. No API calls.
-  --run          Run the full experiment with real GPT API calls.
+  --run          Run the full experiment with real OpenAI (GPT) API calls.
   --run-gemini   Run the full experiment with real Gemini API calls.
   --run-claude   Run the full experiment with real Claude API calls.
   --random       Run a no-intelligence baseline where agents trade randomly. No API calls.
   --probe-only   Run only preference probes (no trading) to measure LLM drift.
+                 OpenAI (GPT) only.
 
 Usage:
   python src/main.py --dry-run
@@ -105,7 +106,7 @@ def cmd_mock_run(cfg) -> None:
  
  
 def cmd_run(cfg) -> None:
-    """Run with real GPT-5.4 API calls."""
+    """Run with real OpenAI API calls (model set by the 'gpt' entry in models.yaml)."""
     from runner import run_llm_experiment
     run_llm_experiment(cfg, "gpt")
 
@@ -142,11 +143,11 @@ def main() -> None:
 Modes:
   --dry-run      Validate configs and preview pairing schedule (no API calls).
   --mock-run     Run full experiment with deterministic mock agents (no API calls).
-  --run          Run full experiment with real GPT API calls.
+  --run          Run full experiment with real OpenAI (GPT) API calls.
   --run-gemini   Run full experiment with real Gemini API calls.
   --run-claude   Run full experiment with real Claude API calls.
   --random       Random-baseline run for comparing against intelligent agents (no API calls).
-  --probe-only   Run only preference probes (no trading) to measure LLM drift.
+  --probe-only   Run only preference probes (no trading) to measure LLM drift (OpenAI only).
         """,
     )
  
@@ -165,7 +166,9 @@ Modes:
     mode_group.add_argument(
         "--run",
         action="store_true",
-        help="Run full experiment with real LLM providers.",
+        help=("Run full experiment with real OpenAI (GPT) API calls. Requires "
+              "the API key env var named in models.yaml's gpt entry "
+              "(e.g. OPENAI_API_KEY) and model_id 'gpt' enabled there."),
     )
     mode_group.add_argument(
         "--run-gemini",
@@ -184,15 +187,17 @@ Modes:
     mode_group.add_argument(
         "--random",
         action="store_true",
-        help=("Random-baseline run: every agent proposes a uniformly random "
-              "1-for-1 trade and accepts/rejects via coin flip. No API calls."),
+        help=("Random-baseline run: in each pair the first speaker proposes a "
+              "uniformly random feasible 1-for-1 trade and the partner always "
+              "accepts. No API calls, no preference probes."),
     )
     mode_group.add_argument(
         "--probe-only",
         action="store_true",
         help=("Run only preference probes (no trading) to measure LLM drift. "
-              "Requires OPENAI_API_KEY. Number of probes set via "
-              "--probe-only-count (default 10)."),
+              "Always uses the OpenAI 'gpt' model entry, so it requires "
+              "OPENAI_API_KEY and model_id 'gpt' enabled in models.yaml. "
+              "Number of probes set via --probe-only-count (default 10)."),
     )
  
     # Mode-specific options
@@ -274,11 +279,11 @@ Modes:
         help=(
             "Force the broadcast condition on, overriding experiment.yaml's "
             "mechanism.broadcast_completed_trades. Under broadcast, every "
-            "accepted trade appends a fixed market bulletin "
-            "(\"Market Update: Agent X exchanged ... with Agent Y. Trade "
-            "described by participants as 'fair and necessary.'\"), and the "
-            "running bulletin board is shown in all negotiation, commitment, "
-            "and preference probe prompts."
+            "accepted trade posts a bulletin rendered from prompts.yaml's "
+            "market_bulletin_template (or a bulletin_rules template), and "
+            "the bulletin board (plus static_broadcast_message, if set) is "
+            "shown in negotiation, commitment, and preference probe prompts. "
+            "New bulletins become visible at the end of the round."
         ),
     )
 
@@ -289,9 +294,8 @@ Modes:
     if args.start_run_index < 1:
         parser.error(f"--start-run-index must be >= 1 (got {args.start_run_index})")
 
-    # API keys are needed for any run that actually calls an LLM.
-    # That's --run, --run-gemini, --run-claude, and --probe-only. Everything
-    # else is offline.
+    # API keys are needed for any run that actually calls an LLM 
+    #(--run, --run-gemini, --run-claude, and --probe-only)
     needs_keys_by_default = (
         args.run or args.run_gemini or args.run_claude or args.probe_only
     )
@@ -326,9 +330,9 @@ Modes:
 
     # Snapshot the starting inventories from players.yaml so each run
     # starts fresh regardless of how the previous run mutated player objects.
-    # (The mock/gpt runners write live post-trade inventories back onto
+    # (The LLM runners write live post-trade inventories back onto
     # player.inventory during a run, so without this reset run 2 would
-    # start from run 1's end-state — agents at their Nash equilibrium.)
+    # start from run 1's end-state.)
     starting_inventories = {
         p.id: dict(p.inventory) for p in cfg.players.players
     }

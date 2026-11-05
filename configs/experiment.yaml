@@ -35,8 +35,7 @@ washout:
   # these washout rounds, even if mechanism.broadcast_completed_trades is on.
   disable_broadcast: true
   # 1-indexed positions within the washout block to probe after. [2, 4]
-  # means "after washout round 2" and "after the final washout round" — with
-  # the current 10-round base schedule that's round 12 and round 14.
+  # means "after washout round 2" and "after the final (4th) washout round"
   probe_after_washout_rounds: [2, 4]
 
 pairing:
@@ -48,17 +47,16 @@ pairing:
   handle_odd_player_count: bye
 
 mechanism:
-  # Parallel within a round, synchronized between rounds.
-  # The runner should:
-  # 1. create all disjoint pairs for the current round
-  # 2. run all pair negotiations concurrently
-  # 3. resolve accepted trades after all pairs finish
-  # 4. update inventories
-  # 5. move to the next round
+  #parallel_pairs not implemented, runs sequentially within each round
   execution_mode: parallel_pairs
   synchronization: end_of_round
 
   negotiation_turns_per_agent: 5
+  # The action space defines the set of possible actions an agent can take during negotiation.
+  # Possible values:
+  #   any_bundle: agent can propose any combination of goods
+  #   small_bundle: each side must be a single good type, but any quantity (e.g. 2×A for 1×C)
+  #   one_for_one: agent can only propose trades involving a single good for a single good
   action_space: any_bundle
   allow_no_trade: true
   require_mutual_acceptance: true
@@ -69,6 +67,7 @@ mechanism:
   broadcast_completed_trades: false
   # Only broadcast trades involving these players. Null = broadcast all trades.
   # Example: [player_1, player_5] = only trades where agent 1 or 5 participates.
+  # Currently set to none (looks for a player named "none," but since it doesn't exist, no trades are broadcast)
   broadcast_filter_players: [none]
   # Optional: pick a different bulletin template depending on who's trading
   # and what they're gaining. Each rule has:
@@ -76,10 +75,10 @@ mechanism:
   #   gains:    the good they need to be gaining (A, B, or C)
   #   template: the name of a template field in prompts.yaml
   # A rule matches when `player` is a participant (proposer or responder) and
-  # gains the specified good. First matching rule wins. If no rule matches,
-  # prompts.yaml's market_bulletin_template is used as the fallback.
+  # gains the specified good. First matching rule wins. If rules are set and
+  # none match, the trade is NOT broadcast. prompts.yaml's
+  # market_bulletin_template is only used when bulletin_rules is null/empty.
   # To disable, set to null.
-  #bulletin_rules: null
   # Example:
   bulletin_rules:
     #  - player: player_3
@@ -106,13 +105,6 @@ mechanism:
     #  - player: player_4
     #    gains: C
     #    template: bulletin_p4_gains_c
-  # Simple alternative to the bulletin_rules machinery above: set
-  # prompts.yaml's static_broadcast_message to a fixed string and it's
-  # shown on the market bulletin board for every prompt, regardless of
-  # whether any trade has happened. Only takes effect when
-  # broadcast_completed_trades above is true -- if that's false, it's
-  # never shown. Suppressed during washout rounds when
-  # washout.disable_broadcast is set.
   mediator_enabled: false
 
 trade_rules:
@@ -123,8 +115,8 @@ trade_rules:
   min_units_per_side: 1
   max_units_per_side: null  # set to null (or omit) for no upper bound; still limited by each agent's inventory
 
-  # For v1, conflicts should not happen because players appear in only one pair
-  # per round. This is here for future scalability.
+  # Conflicts should not happen because players appear in only one pair
+  # per round. This is here to streamline future scalability
   conflict_resolution:
     enabled: true
     method: reject_conflicting_trades
@@ -141,16 +133,12 @@ preference_drift:
   # Survey/probe schedule.
   #
   # mode: "midpoint"  -> fire ONE mid-run probe after the middle round,
-  #   computed as (total_rounds + 1) // 2. With the current 5-round run
-  #   this fires after round 3. If you change round_multiplier or
-  #   num_players later, it auto-adjusts to stay in the middle.
+  #   computed as (total_rounds + 1) // 2. 
   #
   # mode: "interval_rounds" -> fire a probe every `interval_rounds`
-  #   completed rounds (after rounds r, 2r, 3r, ...). Recurring. Use this
-  #   if you want repeated probes through the run, e.g. interval_rounds: 1
-  #   probes after every round. Note this is an interval, NOT a midpoint:
-  #   with 5 rounds, interval_rounds: 3 happens to land on round 3, but a
-  #   longer run would also probe at 6, 9, ...
+  #   completed rounds (after rounds r, 2r, 3r, ...). Recurring. 
+  #    NOTE: interval_rounds runs even after the last round, so currently include_post_probe
+  #    is set to false to prevent double-probing
   #
   # interval_rounds below is only read when mode is "interval_rounds".
   probe_schedule:
@@ -162,8 +150,8 @@ preference_drift:
   # Store the elicited stated preferences separately from trade logs.
   save_probe_responses: true
 
-  # Shadow trades: hypothetical one-off commitment offers sent to every
-  # player alongside each preference probe, to get acquire/surrender signal
+  # Shadow trades: hypothetical one-off commitment offers sent to each
+  # player in player_ids alongside each preference probe, to get acquire/surrender signal
   # on goods that don't come up often enough in real negotiated trades.
   # Each agent sees a normal-looking commitment prompt (so it reads as a
   # real offer), but the decision is never applied to inventories and never
@@ -198,9 +186,6 @@ stopping:
   stop_if_market_converged: false
 
 logging:
-  # Kept outside OneDrive's sync tree: writing hundreds of small files per
-  # run inside a synced folder collides with OneDrive's periodic upload
-  # locks and intermittently throws PermissionError on append.
   output_dir: C:/ExperimentRuns/LLM_Barter_Env/runs
   save_config_snapshot: true
   save_event_jsonl: true

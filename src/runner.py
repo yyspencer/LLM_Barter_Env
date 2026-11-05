@@ -4,22 +4,27 @@ runner.py
 Experiment execution layer for the LLM barter experiment.
  
 This module owns the full experiment loop:
+  pre-run preference probe (if enabled)
   for each round:
-      run preference probes if scheduled
-      pair agents
-      run negotiation for each pair
-      decide whether trade happens (commitment phase)
-      validate and execute trades
-      update inventories
-      log everything
- 
+      for each pair (sequentially):
+          run negotiation turns
+          on each offer: validate it, then ask the partner to accept/reject
+          execute an accepted trade and update inventories
+      publish this round's market bulletins (broadcast condition)
+      run a preference probe if one is scheduled after this round
+  post-run preference probe (if enabled)
+  log everything and write the summary
+
 Entry points:
   run_mock_experiment(cfg)          -- full pipeline with deterministic mock agents
   run_llm_experiment(cfg, provider) -- full pipeline with real API calls
                                         (provider: "gpt" | "gemini" | "claude")
- 
-Both modes share the same round/probe/logging infrastructure. The only
-difference is the agent callables passed into the shared loop.
+  run_random_experiment(cfg)        -- random-trade welfare baseline, no probes
+  run_probe_only_experiment(cfg, count, with_context)
+                                    -- repeated probes only, no trading (OpenAI)
+
+The first three share _run_experiment_loop; the only difference between
+them is the agent callables passed in. Probe-only mode has its own loop.
 """
  
 from __future__ import annotations
@@ -331,7 +336,9 @@ def run_preference_probes(
     mode uses this to produce labels like ``probe_1``, ``probe_2``, ... that
     don't get confused with trade-round numbers.
 
-    probe_fn signature: (player, round_index) -> dict
+    probe_fn signature: (player, round_index, display_order, trade_history,
+    bulletin_board, broadcast) -> dict, or None on a parse error (the probe
+    is then skipped for that player).
 
     shadow_commitment_fn, if given, sends every player the configured
     battery of hypothetical shadow trades (see run_shadow_trades_for_player)
@@ -439,8 +446,10 @@ def run_pair_negotiation(
     visible to them immediately.
  
     negotiation_fn(player, partner, negotiation_history, turn_index,
-                   round_index, pair_id) -> dict
-    commitment_fn(player, proposed_trade, round_index, pair_id) -> dict
+                   round_index, pair_id, display_order, trade_history) -> dict
+    commitment_fn(player, proposed_trade, round_index, pair_id,
+                  partner_name, negotiation_history, display_order,
+                  trade_history) -> dict
  
     Returns a result dict with keys:
       trade_accepted, proposed_trade, proposer_id, responder_id,
@@ -691,10 +700,12 @@ def run_round(
 ) -> List[Dict[str, Any]]:
     """Run one experiment round for all pairs. Returns trade result records.
 
-    If ``bulletin_board`` is provided, a fixed-format market bulletin is
-    appended to it after every accepted trade (broadcast condition). The
-    same list is shared with the negotiation agents so they see all market
-    activity so far when broadcast is enabled.
+    If ``bulletin_board`` is provided (broadcast condition), a market
+    bulletin is generated for each accepted trade that passes
+    broadcast_filter_players / bulletin_rules. Bulletins are buffered and
+    only appended to ``bulletin_board`` at the end of the round, so agents
+    in round N see bulletins from rounds 1..N-1 only. The same list is read
+    by the agent callables when they build prompts.
     """
     round_trades: List[Dict[str, Any]] = []
     # Bulletins generated this round are buffered and only merged into the
@@ -804,10 +815,11 @@ def run_round(
                 f"(utility {util_before_b:.4f} → {util_after_b:.4f})\n"
             )
 
-            # Broadcast condition: append a fixed-format market bulletin for
-            # every accepted trade. The "fair and necessary" framing is
-            # intentional — it injects social framing to probe for preference
-            # drift. The proposer gave `give` and received `receive`.
+            # Broadcast condition: generate a market bulletin for this
+            # accepted trade from a prompts.yaml template. The template's
+            # wording is the experimental manipulation (social framing used
+            # to probe for preference drift). The proposer gave `give` and
+            # received `receive`.
             if bulletin_board is not None:
                 # Optional player filter: only broadcast trades involving
                 # specific agents (e.g. broadcast_filter_players: [player_1]).
@@ -1307,9 +1319,10 @@ def run_mock_experiment(cfg: LoadedConfig) -> RunLogger:
         loaded_config=cfg,
     )
  
-    # The mock agent reads from player.inventory directly, which is the
-    # config-loaded starting inventory. The loop manages its own inventories
-    # dict separately, so we bind a snapshot at call time via default args.
+    # Mock agents' view of each player's inventory. Starts as the
+    # config-loaded inventory and is kept in sync with the loop's own
+    # inventories dict by synced_execute below. Bound into the closures via
+    # a default arg (_inv). Despite the name it holds *live* inventories.
     starting_inventories = {p.id: dict(p.inventory) for p in cfg.players.players}
  
     # Market bulletin board (broadcast condition). Mock agents don't read
@@ -1320,7 +1333,7 @@ def run_mock_experiment(cfg: LoadedConfig) -> RunLogger:
 
     def negotiation_fn(player, partner, negotiation_history, turn_index,
                        round_index, pair_id, _inv=starting_inventories, **_ignored):
-        # Use the live inventories snapshot passed via the loop's closure
+        # _inv is kept in sync with executed trades by synced_execute.
         return mock_negotiation_action(
             player_id=player.id,
             inventory=_inv.get(player.id, dict(player.inventory)),
@@ -1404,9 +1417,11 @@ def _make_claude_client(api_key: str):
     return Anthropic(api_key=api_key)
 
 
-# Each provider agent module exports identically-named functions
-# (gpt_negotiation_action, gpt_commitment_decision, gpt_preference_probe) so
-# they are interchangeable here -- only the client and model_spec differ.
+# Each provider agent module (openai_agent, gemini_agent, claude_agent)
+# exports identically-named functions (gpt_negotiation_action,
+# gpt_commitment_decision, gpt_preference_probe) -- the "gpt_" prefix is
+# historical -- so they are interchangeable here; only the client and
+# model_spec differ.
 _PROVIDER_REGISTRY: Dict[str, Dict[str, Any]] = {
     "gpt": {
         "label": "GPT",
@@ -1498,16 +1513,17 @@ def run_llm_experiment(cfg: LoadedConfig, provider_id: str) -> RunLogger:
     }
 
     # Shared public market bulletin board for the broadcast condition.
-    # run_round appends a bulletin after every accepted trade; the
-    # negotiation closure below reads the same list so agents see all
-    # market activity so far. Gated by broadcast_completed_trades.
+    # run_round appends each round's bulletins at the end of that round;
+    # the closures below read the same list, so agents see bulletins from
+    # earlier rounds only. Gated by broadcast_completed_trades.
     broadcast = cfg.experiment.mechanism.broadcast_completed_trades
     bulletin_board: Optional[List[str]] = [] if broadcast else None
     num_players = len(cfg.players.players)
 
     def _round_broadcast(round_index: int) -> bool:
-        # Same as `broadcast`, except forced off during washout rounds when
-        # washout.disable_broadcast is set (see effective_broadcast).
+        # Same as `broadcast`, except forced off for round 0 (pre-run) and
+        # during washout rounds when washout.disable_broadcast is set (see
+        # effective_broadcast).
         return effective_broadcast(exp_cfg, num_players, round_index)
 
     def negotiation_fn(player, partner, negotiation_history, turn_index,
@@ -1759,7 +1775,7 @@ def run_random_experiment(cfg: LoadedConfig) -> RunLogger:
         # the signature of _run_experiment_loop.
         raise RuntimeError("probe_fn should not be called in random mode")
 
-    # Keep live_inv in sync with applied trades (same pattern as mock/gpt).
+    # Keep live_inv in sync with applied trades (same pattern as mock/LLM runs).
     original_execute = execute_trade
 
     def synced_execute(proposer_id, responder_id, proposed_trade, inventories):
@@ -1819,7 +1835,11 @@ def run_probe_only_experiment(
 
     Results land in ``preference_probes.json`` with labels
     ``probe_1`` ... ``probe_N`` so the existing analysis tooling works
-    without modification.
+    without modification. Shadow trades (if enabled) are run alongside
+    each probe.
+
+    Always uses the OpenAI "gpt" entry in models.yaml, regardless of
+    which providers are used for trading runs.
     """
     from openai import OpenAI
     from openai_agent import (

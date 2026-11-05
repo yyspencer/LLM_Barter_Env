@@ -6,13 +6,13 @@ without making any real LLM API calls.
  
 Strategy (simple but economically sensible):
   - Offer 1 unit of your lowest-weight good you actually own
-    in exchange for 1 unit of the highest-weight good you don't
-    already have in abundance.
+    in exchange for 1 unit of your highest-weight other good
+    (only if that trade doesn't lower your utility).
   - Accept any trade that improves your utility (or leaves it flat).
   - Preference probe responses are derived directly from utility weights.
- 
+
 This is intentionally minimal. Its only purpose is to let runner.py
-exercise the full pipeline end-to-end before real providers are wired in.
+exercise the full pipeline end-to-end (--mock-run) without API calls.
 """
  
 from __future__ import annotations
@@ -113,11 +113,13 @@ def mock_negotiation_action(
     """
     Return a deterministic negotiation action dict.
  
-    On turn 0 (first message), always try to make an offer.
-    On subsequent turns, inspect the partner's last message:
-      - If they proposed a trade and it improves our utility, accept.
-      - If we have a better offer, counter.
-      - Otherwise, reject with a no_trade.
+    On every turn, first inspect the last history entry:
+      - If the partner proposed a trade there and it doesn't lower our
+        utility, return action_type "accept". (The runner treats an
+        "accept" on one's own turn as a no-op — real acceptance only
+        happens in the commitment phase — so this path is mostly inert.)
+    Otherwise make our own 1-for-1 offer, or return no_trade if no
+    non-harmful offer exists.
  
     Return format mirrors the prompts.yaml negotiation response schema:
       action_type, message_to_partner, proposed_trade, accept_trade,

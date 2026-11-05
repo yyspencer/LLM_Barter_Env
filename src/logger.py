@@ -128,6 +128,7 @@ class RunLogger:
         events.jsonl
         trades.json
         preference_probes.json
+        shadow_trades.json
         summary.json
         transcripts.txt
         raw_prompts.jsonl

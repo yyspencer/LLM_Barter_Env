@@ -13,16 +13,15 @@ Anthropic Messages API (Claude Sonnet 5) instead:
   - Retry with exponential backoff on transient API errors
   - Logging raw outputs via RunLogger
 
-Public interface (mirrors mock_agent.py / openai_agent.py / gemini_agent.py
-signatures):
+Public interface (same names and signatures as openai_agent.py /
+gemini_agent.py; the "gpt_" prefix is historical):
   gpt_negotiation_action(...)            -> dict
   gpt_commitment_decision(...)           -> dict
-  gpt_preference_probe(...)              -> dict
-  gpt_preference_probe_contextual(...)   -> (dict, str)
+  gpt_preference_probe(...)              -> dict | None
+  gpt_preference_probe_contextual(...)   -> (dict | None, str)
 
-These are called by runner.py exactly like the other provider modules, so
-swapping providers only requires importing this module's functions and
-passing an anthropic.Anthropic client instead.
+runner.run_llm_experiment(cfg, "claude") loads this module and passes it an
+anthropic.Anthropic client.
 """
 
 from __future__ import annotations
@@ -493,7 +492,7 @@ def gpt_commitment_decision(
     public market bulletin board.
 
     prompt_type/output_type are overridable so callers that reuse this exact
-    prompt shape for a different purpose (e.g. shadow_trades.py's hypothetical
+    prompt shape for a different purpose (e.g. runner.py's shadow-trade
     offers) can tag their logs distinctly from real commitment decisions,
     without duplicating this function.
     """

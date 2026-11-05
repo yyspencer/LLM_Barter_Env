@@ -13,15 +13,15 @@ Same responsibilities as openai_agent.py, but talks to the Gemini API
   - Retry with exponential backoff on transient API errors
   - Logging raw outputs via RunLogger
 
-Public interface (mirrors mock_agent.py / openai_agent.py signatures):
+Public interface (same names and signatures as openai_agent.py /
+claude_agent.py; the "gpt_" prefix is historical):
   gpt_negotiation_action(...)            -> dict
   gpt_commitment_decision(...)           -> dict
-  gpt_preference_probe(...)              -> dict
-  gpt_preference_probe_contextual(...)   -> (dict, str)
+  gpt_preference_probe(...)              -> dict | None
+  gpt_preference_probe_contextual(...)   -> (dict | None, str)
 
-These are called by runner.py exactly like the OpenAI/mock equivalents, so
-swapping providers only requires importing this module's functions and
-passing a genai.Client instead of openai_agent's and an OpenAI client.
+runner.run_llm_experiment(cfg, "gemini") loads this module and passes it a
+genai.Client.
 """
 
 from __future__ import annotations
@@ -61,8 +61,8 @@ _BASE_BACKOFF = 2.0   # seconds; doubles each retry
 
 # Gemini 3.1 Pro is a reasoning model: its internal "thinking" tokens are
 # deducted from the same max_output_tokens budget as the visible answer. A
-# tight budget (e.g. max_tokens: 400 in models.yaml, sized for a plain
-# non-reasoning completion) gets entirely consumed by thinking, leaving the
+# tight budget (e.g. a max_tokens of a few hundred in models.yaml, sized for
+# a plain non-reasoning completion) can get entirely consumed by thinking, leaving the
 # model to return truncated/empty text (finish_reason=MAX_TOKENS). We cap
 # thinking at a fixed budget and add it on top, so a caller's max_tokens
 # continues to mean "budget for the visible answer" as it does for OpenAI.
@@ -333,7 +333,7 @@ def gpt_commitment_decision(
     public market bulletin board.
 
     prompt_type/output_type are overridable so callers that reuse this exact
-    prompt shape for a different purpose (e.g. shadow_trades.py's hypothetical
+    prompt shape for a different purpose (e.g. runner.py's shadow-trade
     offers) can tag their logs distinctly from real commitment decisions,
     without duplicating this function.
     """
